@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.vite
+coverage
+.cache
+migrated_prompt_history/
 
 # Editor directories and files
 .vscode/*
