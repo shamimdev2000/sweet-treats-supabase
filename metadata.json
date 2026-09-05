@@ -1,0 +1,10 @@
+{
+  "name": "Remix Sweet Treats Corporation - Smart Manager",
+  "description": "A comprehensive management system for Sweet Treats Corporation to track sales, inventory, expenses, and get AI-powered business insights using Gemini.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

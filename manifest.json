@@ -1,0 +1,70 @@
+
+{
+  "id": "com.sweettreats.manager",
+  "name": "Sweet Treats Corporation Manager",
+  "short_name": "Sweet Treats",
+  "description": "Professional Management System for Sweet Treats Corporation",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "minimal-ui"],
+  "background_color": "#0a1120",
+  "theme_color": "#F26711",
+  "orientation": "any",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Sale",
+      "url": "/?view=SALES",
+      "description": "Record a new bakery sale",
+      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Inventory",
+      "url": "/?view=INVENTORY",
+      "description": "Check stock levels",
+      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/3014/3014436.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?q=80&w=1000&auto=format&fit=crop",
+      "sizes": "1000x600",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Dashboard Overview"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1555507036-ab1f4038808a?q=80&w=1000&auto=format&fit=crop",
+      "sizes": "600x1000",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Mobile Sales View"
+    }
+  ]
+}
