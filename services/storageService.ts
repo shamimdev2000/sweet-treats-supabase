@@ -1,569 +1,1034 @@
 import { Product, Sale, Expense, Wastage, Staff, Attendance, DailyClosing, Deduction, MonthlyClosing, Production, DailyNote, UserProfile } from '../types';
-import { generateId } from './idGenerator';
+import { supabase } from './supabaseClient';
 
-const STORAGE_KEYS = {
-  PRODUCTS: 'sweetBakery_products',
-  SALES: 'sweetBakery_sales',
-  EXPENSES: 'sweetBakery_expenses',
-  WASTAGE: 'sweetBakery_wastage',
-  STAFF: 'sweetBakery_staff',
-  ATTENDANCE: 'sweetBakery_attendance',
-  CLOSINGS: 'sweetBakery_daily_closings',
-  DEDUCTIONS: 'sweetBakery_deductions',
-  MONTHLY_CLOSINGS: 'sweetBakery_monthly_closings',
-  PRODUCTION: 'sweetBakery_production',
-  NOTES: 'sweetBakery_daily_notes',
-  PROFILE: 'sweetBakery_business_profile'
-};
+// Cache: email -> branch_id
+const branchIdCache = new Map<string, string>();
 
-const PROFILES_KEY = 'sweetBakery_profiles';
-const DB_NAME = 'SweetBakeryDB';
-const DB_VERSION = 3;
-const STORE_NAME = 'key_value_store';
+async function getBranchId(email: string): Promise<string> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (branchIdCache.has(cleanEmail)) return branchIdCache.get(cleanEmail)!;
 
-let dbInstance: IDBDatabase | null = null;
-let dbPromise: Promise<IDBDatabase> | null = null;
-let isIDBAvailable = typeof window !== 'undefined' && !!window.indexedDB;
+  const { data, error } = await supabase.rpc('ensure_default_branch', { p_user_email: cleanEmail });
+  if (error) {
+    console.error('ensure_default_branch error:', error);
+    throw error;
+  }
 
-function getDB(): Promise<IDBDatabase> {
-  if (dbInstance) return Promise.resolve(dbInstance);
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      console.warn("IndexedDB open request timed out. Disabling IndexedDB for this session.");
-      isIDBAvailable = false;
-      dbPromise = null;
-      reject(new Error("IndexedDB open timeout"));
-    }, 1500);
-
-    try {
-      if (!isIDBAvailable) {
-        clearTimeout(timeoutId);
-        dbPromise = null;
-        return reject(new Error("IndexedDB is marked unavailable"));
-      }
-
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      
-      request.onblocked = () => {
-        console.warn("IndexedDB open blocked by a pending connection.");
-        clearTimeout(timeoutId);
-        isIDBAvailable = false;
-        dbPromise = null;
-        reject(new Error("IndexedDB blocked"));
-      };
-
-      request.onerror = () => {
-        clearTimeout(timeoutId);
-        dbPromise = null;
-        console.error("IndexedDB open error:", request.error);
-        reject(request.error || new Error("Unknown IndexedDB open error"));
-      };
-      
-      request.onsuccess = () => {
-        clearTimeout(timeoutId);
-        dbInstance = request.result;
-        dbInstance.onversionchange = () => {
-          dbInstance?.close();
-          dbInstance = null;
-          dbPromise = null;
-        };
-        resolve(dbInstance);
-      };
-      
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
-      };
-    } catch (e) {
-      clearTimeout(timeoutId);
-      dbPromise = null;
-      console.error("IndexedDB synchronous open exception:", e);
-      reject(e);
-    }
-  });
-
-  return dbPromise;
+  branchIdCache.set(cleanEmail, data);
+  return data as string;
 }
 
-const idbGet = <T>(key: string): Promise<T | null> => {
-  return getDB().then((db) => {
-    return new Promise<T | null>((resolve, reject) => {
-      try {
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(key);
-        
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result !== undefined ? request.result as T : null);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-};
-
-const idbSet = <T>(key: string, value: T): Promise<void> => {
-  return getDB().then((db) => {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put(value, key);
-        
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        request.onerror = () => reject(request.error);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-};
-
-const idbDelete = (key: string): Promise<void> => {
-  return getDB().then((db) => {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        const transaction = db.transaction(STORE_NAME, 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(key);
-        
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        request.onerror = () => reject(request.error);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-};
-
-/**
- * Strict tenant isolation key builder
- */
-export const getStorageKey = (keyVal: string, email: string): string => {
-  const cleanEmail = (email || 'demo@bakery.com').trim().toLowerCase().replace(/[@.]/g, '_');
-  const baseKey = keyVal.startsWith('sweetBakery_') ? keyVal.replace('sweetBakery_', '') : keyVal;
-  return `sweetBakery_${cleanEmail}_${baseKey}`;
-};
-
-const getFromStorage = async <T>(keyVal: string, email: string): Promise<T[]> => {
-  const fullKey = getStorageKey(keyVal, email);
-  
-  // 1. Try LocalStorage FIRST
-  try {
-    const backup = localStorage.getItem(fullKey);
-    if (backup) {
-      return JSON.parse(backup);
-    }
-  } catch (err) {
-    console.error(`localStorage read failed for ${fullKey}:`, err);
+function clearBranchCache(email?: string) {
+  if (email) {
+    branchIdCache.delete(email.trim().toLowerCase());
+  } else {
+    branchIdCache.clear();
   }
+}
 
-  // 2. Fallback to IndexedDB
-  if (isIDBAvailable) {
-    try {
-      const data = await idbGet<T[]>(fullKey);
-      if (data && Array.isArray(data)) {
-        localStorage.setItem(fullKey, JSON.stringify(data));
-        return data;
-      }
-    } catch (e) {
-      console.warn(`IndexedDB read failed for ${fullKey}:`, e);
-    }
-  }
+// ── Mapping helpers (snake_case DB ↔ camelCase TS) ──
 
-  return [];
-};
+function mapProduct(row: any): Product {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    price: Number(row.price),
+    stock: Number(row.stock),
+    unit: row.unit,
+    barcode: row.barcode || undefined,
+  };
+}
 
-const saveToStorage = async <T>(keyVal: string, data: T[], email: string): Promise<void> => {
-  const fullKey = getStorageKey(keyVal, email);
-  
-  // 1. Save to LocalStorage
-  try {
-    localStorage.setItem(fullKey, JSON.stringify(data));
-  } catch (err) {
-    console.error(`localStorage write failed for ${fullKey}:`, err);
-  }
+function mapSale(row: any): Sale {
+  return {
+    id: row.id,
+    items: (row.sale_items || []).map((item: any) => ({
+      productId: item.product_id,
+      productName: item.product_name,
+      quantity: Number(item.quantity),
+      unit: item.unit,
+      pricePerUnit: Number(item.price_per_unit),
+      subTotal: Number(item.sub_total),
+    })),
+    totalPrice: Number(row.total_price),
+    discount: Number(row.discount) || 0,
+    amountPaid: Number(row.amount_paid),
+    dueAmount: Number(row.due_amount),
+    customerName: row.customer_name || undefined,
+    customerPhone: row.customer_phone || undefined,
+    paymentMethod: row.payment_method,
+    mobileProvider: row.mobile_provider || undefined,
+    transactionId: row.transaction_id || undefined,
+    date: row.date,
+    payments: (row.payments || []).map((p: any) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      date: p.date,
+      method: p.method,
+    })),
+  };
+}
 
-  // 2. Sync to IndexedDB
-  if (isIDBAvailable) {
-    try {
-      await idbSet<T[]>(fullKey, data);
-    } catch (e) {
-      console.warn(`IndexedDB write failed for ${fullKey}:`, e);
-    }
-  }
-};
+function mapExpense(row: any): Expense {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    category: row.category,
+    date: row.date,
+  };
+}
 
-/**
- * Starter sample products for users who opt into a Starter Pack or Demo Account
- */
-export const createStarterPackProducts = (): Product[] => [
-  { id: generateId('prod'), name: 'Black Forest Special Cake (1kg)', category: 'Cakes', price: 950, stock: 15, unit: 'pcs', barcode: '1001' },
-  { id: generateId('prod'), name: 'Butter Croissant Premium', category: 'Pastry', price: 80, stock: 45, unit: 'pcs', barcode: '1002' },
-  { id: generateId('prod'), name: 'Whole Wheat Milk Bread', category: 'Bread', price: 65, stock: 60, unit: 'pkt', barcode: '1003' },
-  { id: generateId('prod'), name: 'Dark Chocolate Donut', category: 'Snacks', price: 60, stock: 35, unit: 'pcs', barcode: '1004' },
-  { id: generateId('prod'), name: 'Chicken Puff Pastry', category: 'Fast Food', price: 50, stock: 40, unit: 'pcs', barcode: '1005' },
-  { id: generateId('prod'), name: 'Gulab Jamun Sweet Box (500g)', category: 'Sweets', price: 280, stock: 25, unit: 'box', barcode: '1006' },
-  { id: generateId('prod'), name: 'Vanilla Cream Roll', category: 'Bakery', price: 35, stock: 50, unit: 'pcs', barcode: '1007' },
-  { id: generateId('prod'), name: 'Cold Brew Iced Coffee', category: 'Beverage', price: 120, stock: 30, unit: 'pcs', barcode: '1008' }
-];
+function mapWastage(row: any): Wastage {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    productName: row.product_name,
+    quantity: Number(row.quantity),
+    unit: row.unit,
+    lossValue: Number(row.loss_value),
+    reason: row.reason,
+    date: row.date,
+  };
+}
+
+function mapStaff(row: any): Staff {
+  return {
+    id: row.id,
+    name: row.name,
+    designation: row.designation,
+    monthlySalary: Number(row.monthly_salary),
+    joinDate: row.join_date,
+  };
+}
+
+function mapAttendance(row: any): Attendance {
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    date: row.date,
+    status: row.status,
+  };
+}
+
+function mapDeduction(row: any): Deduction {
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    amount: Number(row.amount),
+    reason: row.reason,
+    date: row.date,
+  };
+}
+
+function mapDailyClosing(row: any): DailyClosing {
+  return {
+    id: row.id,
+    date: row.date,
+    totalSales: Number(row.total_sales),
+    totalCashCollected: Number(row.total_cash_collected),
+    totalCashPayments: Number(row.total_cash_payments),
+    totalMobilePayments: Number(row.total_mobile_payments),
+    totalExpenses: Number(row.total_expenses),
+    totalWastage: Number(row.total_wastage),
+    systemBalance: Number(row.system_balance),
+    actualCash: Number(row.actual_cash),
+    difference: Number(row.difference),
+    closedBy: row.closed_by,
+    timestamp: row.timestamp,
+  };
+}
+
+function mapMonthlyClosing(row: any): MonthlyClosing {
+  return {
+    id: row.id,
+    month: row.month,
+    totalSales: Number(row.total_sales),
+    totalCashPayments: Number(row.total_cash_payments),
+    totalMobilePayments: Number(row.total_mobile_payments),
+    totalExpenses: Number(row.total_expenses),
+    totalWastage: Number(row.total_wastage),
+    totalProfit: Number(row.total_profit),
+    totalDues: Number(row.total_dues) || 0,
+    closedBy: row.closed_by,
+    timestamp: row.timestamp,
+  };
+}
+
+function mapProduction(row: any): Production {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    productName: row.product_name,
+    quantity: Number(row.quantity),
+    unit: row.unit,
+    unitPrice: Number(row.unit_price),
+    totalValue: Number(row.total_value),
+    date: row.date,
+  };
+}
+
+function mapDailyNote(row: any): DailyNote {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    priority: row.priority,
+    status: row.status,
+    assignedTo: row.assigned_to || undefined,
+    author: row.author,
+    createdAt: row.created_at,
+    pinned: row.pinned || false,
+  };
+}
+
+// ── Storage Service (same interface, Supabase backend) ──
 
 export const storageService = {
-  // Profiles Management (Multi-tenant User Accounts)
+  // ── Profiles ──
   getProfiles(): UserProfile[] {
-    try {
-      const data = localStorage.getItem(PROFILES_KEY);
-      if (data) return JSON.parse(data);
-    } catch (e) {
-      console.error("Error reading profiles:", e);
-    }
-    
-    // Seed default demo profile if empty
-    const demoProfile: UserProfile = {
-      id: 'usr_demo_bakery',
-      email: 'demo@bakery.com',
-      username: 'demobakery',
-      businessName: 'Sweet Treats Corporation',
-      ownerName: 'Demo Bakery Manager',
-      phone: '+880 1700-000000',
-      address: 'Shop 104, Baker Street Avenue',
-      password: 'password123',
-      managerPin: '123456',
-      currencySymbol: '৳',
-      receiptFooter: 'Thank you for shopping with us! Freshly baked every morning.',
-      createdAt: new Date().toISOString(),
-      starterPack: true
-    };
-    
-    try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify([demoProfile]));
-    } catch {
-      // Ignore
-    }
-    return [demoProfile];
+    return [];
   },
 
-  saveProfiles(profiles: UserProfile[]): void {
-    try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-    } catch (e) {
-      console.error("Error saving profiles:", e);
-    }
+  saveProfiles(_profiles: UserProfile[]): void {
+    // No-op: profiles are managed by Supabase Auth + profiles table
   },
 
   getProfileByEmail(email: string): UserProfile | null {
-    const cleanEmail = email.trim().toLowerCase();
-    const profiles = this.getProfiles();
-    return profiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
+    // Synchronous fallback for code that hasn't been converted to async yet
+    // Returns null; callers should use getProfileByEmailAsync
+    return null;
   },
 
-  saveProfile(profile: UserProfile): void {
-    const profiles = this.getProfiles();
-    const cleanEmail = profile.email.trim().toLowerCase();
-    const index = profiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
-    if (index > -1) {
-      profiles[index] = { ...profiles[index], ...profile };
-    } else {
-      profiles.push(profile);
-    }
-    this.saveProfiles(profiles);
+  async getProfileByEmailAsync(email: string): Promise<UserProfile | null> {
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', cleanEmail)
+      .maybeSingle();
 
-    // Also mirror to scoped profile storage
-    const fullKey = getStorageKey(STORAGE_KEYS.PROFILE, cleanEmail);
-    try {
-      localStorage.setItem(fullKey, JSON.stringify(profile));
-    } catch (e) {
-      console.error("Failed to save scoped profile:", e);
-    }
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      email: data.email,
+      username: data.email.split('@')[0],
+      businessName: data.business_name || data.full_name || 'My Bakery',
+      ownerName: data.owner_name || data.full_name || data.email.split('@')[0],
+      phone: data.phone || undefined,
+      address: data.address || undefined,
+      managerPin: data.manager_pin || '123456',
+      currencySymbol: data.currency_symbol || '৳',
+      receiptFooter: data.receipt_footer || 'Thank you for shopping with us!',
+      createdAt: data.created_at,
+      starterPack: false,
+    } as UserProfile;
+  },
+
+  saveProfile(_profile: UserProfile): void {
+    // No-op: use updateProfile
   },
 
   async updateProfile(email: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
     const cleanEmail = email.trim().toLowerCase();
-    const profiles = this.getProfiles();
-    const index = profiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
-    if (index === -1) return null;
+    const dbUpdates: any = {};
+    if (updates.businessName !== undefined) dbUpdates.business_name = updates.businessName;
+    if (updates.ownerName !== undefined) dbUpdates.owner_name = updates.ownerName;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.address !== undefined) dbUpdates.address = updates.address;
+    if (updates.managerPin !== undefined) dbUpdates.manager_pin = updates.managerPin;
+    if (updates.currencySymbol !== undefined) dbUpdates.currency_symbol = updates.currencySymbol;
+    if (updates.receiptFooter !== undefined) dbUpdates.receipt_footer = updates.receiptFooter;
+    if (updates.full_name !== undefined) dbUpdates.full_name = updates.full_name;
 
-    profiles[index] = {
-      ...profiles[index],
-      ...updates
-    };
-    this.saveProfiles(profiles);
-
-    // Also sync manager password key if manager PIN updated
-    if (updates.managerPin) {
-      const pinKey = getStorageKey('managerPass', cleanEmail);
-      localStorage.setItem(pinKey, updates.managerPin);
+    if (Object.keys(dbUpdates).length === 0) {
+      return await this.getProfileByEmailAsync(cleanEmail);
     }
 
-    const fullKey = getStorageKey(STORAGE_KEYS.PROFILE, cleanEmail);
-    try {
-      localStorage.setItem(fullKey, JSON.stringify(profiles[index]));
-    } catch (e) {
-      console.error("Failed to update scoped profile:", e);
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return null;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(dbUpdates)
+      .eq('id', authData.user.id)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      console.error('updateProfile error:', error);
+      return null;
     }
 
-    return profiles[index];
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      email: data.email,
+      username: data.email.split('@')[0],
+      businessName: data.business_name || data.full_name || 'My Bakery',
+      ownerName: data.owner_name || data.full_name || data.email.split('@')[0],
+      phone: data.phone || undefined,
+      address: data.address || undefined,
+      managerPin: data.manager_pin || '123456',
+      currencySymbol: data.currency_symbol || '৳',
+      receiptFooter: data.receipt_footer || 'Thank you for shopping with us!',
+      createdAt: data.created_at,
+      starterPack: false,
+    } as UserProfile;
   },
 
   getManagerPin(email: string): string {
-    const cleanEmail = email.trim().toLowerCase();
-    const pinKey = getStorageKey('managerPass', cleanEmail);
-    const savedPin = localStorage.getItem(pinKey);
-    if (savedPin) return savedPin;
-
-    const profile = this.getProfileByEmail(cleanEmail);
-    if (profile && profile.managerPin) return profile.managerPin;
-
     return '123456';
   },
 
+  async getManagerPinAsync(email: string): Promise<string> {
+    const profile = await this.getProfileByEmailAsync(email);
+    return profile?.managerPin || '123456';
+  },
+
   setManagerPin(email: string, newPin: string): void {
-    const cleanEmail = email.trim().toLowerCase();
-    const pinKey = getStorageKey('managerPass', cleanEmail);
-    localStorage.setItem(pinKey, newPin);
-
-    // Update in profile as well
-    this.updateProfile(cleanEmail, { managerPin: newPin });
+    this.updateProfile(email, { managerPin: newPin });
   },
 
-  // Products
+  // ── Products ──
   async getProducts(email: string): Promise<Product[]> {
-    let prods = await getFromStorage<Product>(STORAGE_KEYS.PRODUCTS, email);
-    // If demo account or fresh account with starter pack flag, seed starter products
-    if (prods.length === 0) {
-      const profile = this.getProfileByEmail(email);
-      if (email.toLowerCase() === 'demo@bakery.com' || profile?.starterPack) {
-        prods = createStarterPackProducts();
-        await saveToStorage(STORAGE_KEYS.PRODUCTS, prods, email);
-      }
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('getProducts error:', error);
+      return [];
     }
-    return prods;
-  },
-  async upsertProduct(email: string, product: Product) {
-    const products = await getFromStorage<Product>(STORAGE_KEYS.PRODUCTS, email);
-    const index = products.findIndex(p => p.id === product.id);
-    if (index > -1) {
-      products[index] = product;
-    } else {
-      products.unshift(product);
-    }
-    await saveToStorage(STORAGE_KEYS.PRODUCTS, products, email);
-  },
-  async deleteProduct(email: string, id: string) {
-    const products = await getFromStorage<Product>(STORAGE_KEYS.PRODUCTS, email);
-    await saveToStorage(STORAGE_KEYS.PRODUCTS, products.filter(p => p.id !== id), email);
+
+    return (data || []).map(mapProduct);
   },
 
-  // Sales
+  async upsertProduct(email: string, product: Product): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    // Check if product exists
+    const { data: existing } = await supabase
+      .from('products')
+      .select('id')
+      .eq('id', product.id)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+
+    if (existing) {
+      // Update only non-stock fields (stock is managed by RPC functions)
+      const { error } = await supabase
+        .from('products')
+        .update({
+          name: product.name,
+          category: product.category,
+          price: product.price,
+          unit: product.unit,
+          barcode: product.barcode || null,
+        })
+        .eq('id', product.id)
+        .eq('branch_id', branchId);
+
+      if (error) console.error('upsertProduct update error:', error);
+    } else {
+      // Insert new product with initial stock
+      const { error } = await supabase
+        .from('products')
+        .insert({
+          id: product.id,
+          branch_id: branchId,
+          name: product.name,
+          category: product.category,
+          price: product.price,
+          stock: product.stock,
+          unit: product.unit,
+          barcode: product.barcode || null,
+        });
+
+      if (error) console.error('upsertProduct insert error:', error);
+    }
+  },
+
+  async deleteProduct(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('deleteProduct error:', error);
+  },
+
+  // ── Sales ──
   async getSales(email: string): Promise<Sale[]> {
-    return await getFromStorage<Sale>(STORAGE_KEYS.SALES, email);
-  },
-  async addSale(email: string, sale: Sale) {
-    const sales = await getFromStorage<Sale>(STORAGE_KEYS.SALES, email);
-    sales.push(sale);
-    await saveToStorage(STORAGE_KEYS.SALES, sales, email);
-  },
-  async updateSale(email: string, sale: Sale) {
-    const sales = await getFromStorage<Sale>(STORAGE_KEYS.SALES, email);
-    const index = sales.findIndex(s => s.id === sale.id);
-    if (index > -1) {
-      sales[index] = sale;
-      await saveToStorage(STORAGE_KEYS.SALES, sales, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*, sale_items(*), payments(*)')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getSales error:', error);
+      return [];
     }
-  },
-  async deleteSale(email: string, id: string) {
-    const sales = await getFromStorage<Sale>(STORAGE_KEYS.SALES, email);
-    await saveToStorage(STORAGE_KEYS.SALES, sales.filter(s => s.id !== id), email);
+
+    return (data || []).map(mapSale);
   },
 
-  // Expenses
+  async addSale(email: string, sale: Sale): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    const itemsJson = sale.items.map(item => ({
+      product_id: item.productId,
+      product_name: item.productName,
+      quantity: item.quantity,
+      unit: item.unit,
+      price_per_unit: item.pricePerUnit,
+      sub_total: item.subTotal,
+      category: (item as any).category || undefined,
+    }));
+
+    const { data, error } = await supabase.rpc('create_sale', {
+      p_branch_id: branchId,
+      p_items: itemsJson,
+      p_total_price: sale.totalPrice,
+      p_discount: sale.discount || 0,
+      p_amount_paid: sale.amountPaid,
+      p_payment_method: sale.paymentMethod,
+      p_customer_name: sale.customerName || null,
+      p_customer_phone: sale.customerPhone || null,
+      p_mobile_provider: sale.mobileProvider || null,
+      p_transaction_id: sale.transactionId || null,
+    });
+
+    if (error) {
+      console.error('addSale error:', error);
+      throw error;
+    }
+  },
+
+  async updateSale(email: string, sale: Sale): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    // This is called from DuesView for collecting due payments
+    // Extract the new payment (last in the payments array)
+    const payments = sale.payments || [];
+    if (payments.length === 0) return;
+
+    const lastPayment = payments[payments.length - 1];
+
+    const { error } = await supabase.rpc('collect_due_payment', {
+      p_branch_id: branchId,
+      p_sale_id: sale.id,
+      p_amount: lastPayment.amount,
+      p_payment_method: lastPayment.method,
+      p_mobile_provider: sale.mobileProvider || null,
+      p_transaction_id: sale.transactionId || null,
+    });
+
+    if (error) {
+      console.error('updateSale error:', error);
+    }
+  },
+
+  async deleteSale(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase.rpc('cancel_sale', {
+      p_branch_id: branchId,
+      p_sale_id: id,
+    });
+
+    if (error) {
+      console.error('deleteSale error:', error);
+    }
+  },
+
+  // ── Expenses ──
   async getExpenses(email: string): Promise<Expense[]> {
-    return await getFromStorage<Expense>(STORAGE_KEYS.EXPENSES, email);
-  },
-  async addExpense(email: string, expense: Expense) {
-    const expenses = await getFromStorage<Expense>(STORAGE_KEYS.EXPENSES, email);
-    expenses.push(expense);
-    await saveToStorage(STORAGE_KEYS.EXPENSES, expenses, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getExpenses error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapExpense);
   },
 
-  // Wastage
+  async addExpense(email: string, expense: Expense): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('expenses').insert({
+      id: expense.id,
+      branch_id: branchId,
+      description: expense.description,
+      amount: expense.amount,
+      category: expense.category,
+      date: expense.date,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addExpense error:', error);
+  },
+
+  // ── Wastage ──
   async getWastage(email: string): Promise<Wastage[]> {
-    return await getFromStorage<Wastage>(STORAGE_KEYS.WASTAGE, email);
-  },
-  async addWastage(email: string, wastage: Wastage) {
-    const all = await getFromStorage<Wastage>(STORAGE_KEYS.WASTAGE, email);
-    all.push(wastage);
-    await saveToStorage(STORAGE_KEYS.WASTAGE, all, email);
-  },
-  async deleteWastage(email: string, id: string) {
-    const all = await getFromStorage<Wastage>(STORAGE_KEYS.WASTAGE, email);
-    await saveToStorage(STORAGE_KEYS.WASTAGE, all.filter(w => w.id !== id), email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('wastage')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getWastage error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapWastage);
   },
 
-  // Staff
+  async addWastage(email: string, wastage: Wastage): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    const { data, error } = await supabase.rpc('record_wastage', {
+      p_branch_id: branchId,
+      p_product_id: wastage.productId,
+      p_quantity: wastage.quantity,
+      p_reason: wastage.reason,
+    });
+
+    if (error) {
+      console.error('addWastage error:', error);
+      throw error;
+    }
+  },
+
+  async deleteWastage(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase.rpc('delete_wastage', {
+      p_branch_id: branchId,
+      p_wastage_id: id,
+    });
+
+    if (error) {
+      console.error('deleteWastage error:', error);
+    }
+  },
+
+  // ── Staff ──
   async getStaff(email: string): Promise<Staff[]> {
-    return await getFromStorage<Staff>(STORAGE_KEYS.STAFF, email);
-  },
-  async addStaff(email: string, staff: Staff) {
-    const all = await getFromStorage<Staff>(STORAGE_KEYS.STAFF, email);
-    all.push(staff);
-    await saveToStorage(STORAGE_KEYS.STAFF, all, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('staff')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('getStaff error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapStaff);
   },
 
-  // Attendance
+  async addStaff(email: string, staff: Staff): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('staff').insert({
+      id: staff.id,
+      branch_id: branchId,
+      name: staff.name,
+      designation: staff.designation,
+      monthly_salary: staff.monthlySalary,
+      join_date: staff.joinDate,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addStaff error:', error);
+  },
+
+  // ── Attendance ──
   async getAttendance(email: string): Promise<Attendance[]> {
-    return await getFromStorage<Attendance>(STORAGE_KEYS.ATTENDANCE, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getAttendance error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapAttendance);
   },
-  async upsertAttendance(email: string, attendance: Attendance) {
-    const all = await getFromStorage<Attendance>(STORAGE_KEYS.ATTENDANCE, email);
-    const index = all.findIndex(item => item.staffId === attendance.staffId && item.date === attendance.date);
-    if (index > -1) {
-      all[index] = attendance;
+
+  async upsertAttendance(email: string, attendance: Attendance): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    // Try update first
+    const { data: existing } = await supabase
+      .from('attendance')
+      .select('id')
+      .eq('staff_id', attendance.staffId)
+      .eq('date', attendance.date)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await supabase
+        .from('attendance')
+        .update({ status: attendance.status })
+        .eq('id', existing.id)
+        .eq('branch_id', branchId);
+
+      if (error) console.error('upsertAttendance update error:', error);
     } else {
-      all.push(attendance);
+      const { error } = await supabase.from('attendance').insert({
+        id: attendance.id,
+        branch_id: branchId,
+        staff_id: attendance.staffId,
+        date: attendance.date,
+        status: attendance.status,
+      });
+
+      if (error) console.error('upsertAttendance insert error:', error);
     }
-    await saveToStorage(STORAGE_KEYS.ATTENDANCE, all, email);
   },
 
-  // Closings
+  // ── Daily Closings ──
   async getClosings(email: string): Promise<DailyClosing[]> {
-    return await getFromStorage<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-  },
-  async addClosing(email: string, closing: DailyClosing) {
-    const all = await getFromStorage<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    all.push(closing);
-    await saveToStorage(STORAGE_KEYS.CLOSINGS, all, email);
-  },
-  async deleteClosing(email: string, id: string) {
-    const all = await getFromStorage<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    await saveToStorage(STORAGE_KEYS.CLOSINGS, all.filter(c => c.id !== id), email);
-  },
-  async updateClosing(email: string, updatedClosing: DailyClosing) {
-    const all = await getFromStorage<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    const updated = all.map(c => c.id === updatedClosing.id ? updatedClosing : c);
-    await saveToStorage(STORAGE_KEYS.CLOSINGS, updated, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('daily_closings')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getClosings error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapDailyClosing);
   },
 
-  // Deductions
+  async addClosing(email: string, closing: DailyClosing): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('daily_closings').insert({
+      id: closing.id,
+      branch_id: branchId,
+      date: closing.date,
+      total_sales: closing.totalSales,
+      total_cash_collected: closing.totalCashCollected,
+      total_cash_payments: closing.totalCashPayments,
+      total_mobile_payments: closing.totalMobilePayments,
+      total_expenses: closing.totalExpenses,
+      total_wastage: closing.totalWastage,
+      system_balance: closing.systemBalance,
+      actual_cash: closing.actualCash,
+      difference: closing.difference,
+      closed_by: closing.closedBy,
+      timestamp: closing.timestamp,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addClosing error:', error);
+  },
+
+  async deleteClosing(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('daily_closings')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('deleteClosing error:', error);
+  },
+
+  async updateClosing(email: string, updatedClosing: DailyClosing): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('daily_closings')
+      .update({
+        date: updatedClosing.date,
+        actual_cash: updatedClosing.actualCash,
+        difference: updatedClosing.difference,
+      })
+      .eq('id', updatedClosing.id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('updateClosing error:', error);
+  },
+
+  // ── Deductions ──
   async getDeductions(email: string): Promise<Deduction[]> {
-    return await getFromStorage<Deduction>(STORAGE_KEYS.DEDUCTIONS, email);
-  },
-  async addDeduction(email: string, deduction: Deduction) {
-    const all = await getFromStorage<Deduction>(STORAGE_KEYS.DEDUCTIONS, email);
-    all.push(deduction);
-    await saveToStorage(STORAGE_KEYS.DEDUCTIONS, all, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('deductions')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getDeductions error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapDeduction);
   },
 
-  // Monthly Closings
+  async addDeduction(email: string, deduction: Deduction): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('deductions').insert({
+      id: deduction.id,
+      branch_id: branchId,
+      staff_id: deduction.staffId,
+      amount: deduction.amount,
+      reason: deduction.reason,
+      date: deduction.date,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addDeduction error:', error);
+  },
+
+  // ── Monthly Closings ──
   async getMonthlyClosings(email: string): Promise<MonthlyClosing[]> {
-    return await getFromStorage<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
-  },
-  async addMonthlyClosing(email: string, closing: MonthlyClosing) {
-    const all = await getFromStorage<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
-    all.push(closing);
-    await saveToStorage(STORAGE_KEYS.MONTHLY_CLOSINGS, all, email);
-  },
-  async deleteMonthlyClosing(email: string, id: string) {
-    const all = await getFromStorage<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
-    await saveToStorage(STORAGE_KEYS.MONTHLY_CLOSINGS, all.filter(c => c.id !== id), email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('monthly_closings')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('month', { ascending: false });
+
+    if (error) {
+      console.error('getMonthlyClosings error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapMonthlyClosing);
   },
 
-  // Production
+  async addMonthlyClosing(email: string, closing: MonthlyClosing): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('monthly_closings').insert({
+      id: closing.id,
+      branch_id: branchId,
+      month: closing.month,
+      total_sales: closing.totalSales,
+      total_cash_payments: closing.totalCashPayments,
+      total_mobile_payments: closing.totalMobilePayments,
+      total_expenses: closing.totalExpenses,
+      total_wastage: closing.totalWastage,
+      total_profit: closing.totalProfit,
+      total_dues: closing.totalDues || 0,
+      closed_by: closing.closedBy,
+      timestamp: closing.timestamp,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addMonthlyClosing error:', error);
+  },
+
+  async deleteMonthlyClosing(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('monthly_closings')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('deleteMonthlyClosing error:', error);
+  },
+
+  // ── Production ──
   async getProduction(email: string): Promise<Production[]> {
-    return await getFromStorage<Production>(STORAGE_KEYS.PRODUCTION, email);
-  },
-  async addProduction(email: string, production: Production) {
-    const all = await getFromStorage<Production>(STORAGE_KEYS.PRODUCTION, email);
-    all.push(production);
-    await saveToStorage(STORAGE_KEYS.PRODUCTION, all, email);
-  },
-  async deleteProduction(email: string, id: string) {
-    const all = await getFromStorage<Production>(STORAGE_KEYS.PRODUCTION, email);
-    await saveToStorage(STORAGE_KEYS.PRODUCTION, all.filter(p => p.id !== id), email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('production')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('getProduction error:', error);
+      return [];
+    }
+
+    return (data || []).map(mapProduction);
   },
 
-  // Daily Notes
+  async addProduction(email: string, production: Production): Promise<void> {
+    const branchId = await getBranchId(email);
+
+    const { data, error } = await supabase.rpc('record_production', {
+      p_branch_id: branchId,
+      p_product_id: production.productId,
+      p_quantity: production.quantity,
+      p_unit_price: production.unitPrice,
+    });
+
+    if (error) {
+      console.error('addProduction error:', error);
+      // Fallback: direct insert without stock update (for compatibility)
+      const { data: authData } = await supabase.auth.getUser();
+      const { error: insertError } = await supabase.from('production').insert({
+        id: production.id,
+        branch_id: branchId,
+        product_id: production.productId,
+        product_name: production.productName,
+        quantity: production.quantity,
+        unit: production.unit,
+        unit_price: production.unitPrice,
+        total_value: production.totalValue,
+        date: production.date,
+        created_by: authData.user?.id || null,
+      });
+      if (insertError) console.error('addProduction fallback error:', insertError);
+    }
+  },
+
+  async deleteProduction(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('production')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('deleteProduction error:', error);
+  },
+
+  // ── Daily Notes ──
   async getNotes(email: string): Promise<DailyNote[]> {
-    return await getFromStorage<DailyNote>(STORAGE_KEYS.NOTES, email);
-  },
-  async addNote(email: string, note: DailyNote) {
-    const all = await getFromStorage<DailyNote>(STORAGE_KEYS.NOTES, email);
-    all.unshift(note);
-    await saveToStorage(STORAGE_KEYS.NOTES, all, email);
-  },
-  async updateNote(email: string, updatedNote: DailyNote) {
-    const all = await getFromStorage<DailyNote>(STORAGE_KEYS.NOTES, email);
-    const index = all.findIndex(n => n.id === updatedNote.id);
-    if (index > -1) {
-      all[index] = updatedNote;
-      await saveToStorage(STORAGE_KEYS.NOTES, all, email);
+    const branchId = await getBranchId(email);
+    const { data, error } = await supabase
+      .from('daily_notes')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('getNotes error:', error);
+      return [];
     }
-  },
-  async deleteNote(email: string, id: string) {
-    const all = await getFromStorage<DailyNote>(STORAGE_KEYS.NOTES, email);
-    await saveToStorage(STORAGE_KEYS.NOTES, all.filter(n => n.id !== id), email);
+
+    return (data || []).map(mapDailyNote);
   },
 
-  // Clear data ONLY for this specific user/tenant without touching other accounts
+  async addNote(email: string, note: DailyNote): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { data: authData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from('daily_notes').insert({
+      id: note.id,
+      branch_id: branchId,
+      title: note.title,
+      content: note.content,
+      priority: note.priority,
+      status: note.status,
+      assigned_to: note.assignedTo || null,
+      author: note.author,
+      pinned: note.pinned || false,
+      created_at: note.createdAt,
+      created_by: authData.user?.id || null,
+    });
+
+    if (error) console.error('addNote error:', error);
+  },
+
+  async updateNote(email: string, updatedNote: DailyNote): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('daily_notes')
+      .update({
+        title: updatedNote.title,
+        content: updatedNote.content,
+        priority: updatedNote.priority,
+        status: updatedNote.status,
+        assigned_to: updatedNote.assignedTo || null,
+        pinned: updatedNote.pinned || false,
+      })
+      .eq('id', updatedNote.id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('updateNote error:', error);
+  },
+
+  async deleteNote(email: string, id: string): Promise<void> {
+    const branchId = await getBranchId(email);
+    const { error } = await supabase
+      .from('daily_notes')
+      .delete()
+      .eq('id', id)
+      .eq('branch_id', branchId);
+
+    if (error) console.error('deleteNote error:', error);
+  },
+
+  // ── Clear all data for user ──
   async clearAllDataForUser(email: string): Promise<void> {
-    const cleanEmail = email.trim().toLowerCase();
-    try {
-      for (const [_, globalKey] of Object.entries(STORAGE_KEYS)) {
-        const fullKey = getStorageKey(globalKey, cleanEmail);
-        localStorage.removeItem(fullKey);
-        await idbDelete(fullKey);
-      }
-      const pinKey = getStorageKey('managerPass', cleanEmail);
-      localStorage.removeItem(pinKey);
-      console.log(`Isolated storage cleared for user: ${cleanEmail}`);
-    } catch (err) {
-      console.error("Storage clear failed:", err);
+    const branchId = await getBranchId(email);
+    clearBranchCache(email);
+
+    // Delete all data in the branch (order matters for FK constraints)
+    const tables = [
+      'daily_notes', 'monthly_closings', 'daily_closings',
+      'deductions', 'attendance', 'staff',
+      'expenses', 'wastage', 'production',
+      'sale_items', 'payments', 'sales',
+      'products',
+    ];
+
+    for (const table of tables) {
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .eq('branch_id', branchId);
+
+      if (error) console.error(`clearAllData ${table} error:`, error);
     }
   },
 
-  // Backup & Restore for active user/tenant
+  // ── Backup & Restore ──
   async exportAllData(email: string): Promise<string> {
     const cleanEmail = email.trim().toLowerCase();
-    const profile = this.getProfileByEmail(cleanEmail);
-    const data: any = {};
-    for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
-      data[key.toLowerCase()] = await getFromStorage(storageKey, cleanEmail);
-    }
+    const profile = await this.getProfileByEmailAsync(cleanEmail);
+    const branchId = await getBranchId(cleanEmail);
+
+    const [products, sales, expenses, wastage, staff, attendance, closings, deductions, monthlyClosings, production, notes] = await Promise.all([
+      this.getProducts(cleanEmail),
+      this.getSales(cleanEmail),
+      this.getExpenses(cleanEmail),
+      this.getWastage(cleanEmail),
+      this.getStaff(cleanEmail),
+      this.getAttendance(cleanEmail),
+      this.getClosings(cleanEmail),
+      this.getDeductions(cleanEmail),
+      this.getMonthlyClosings(cleanEmail),
+      this.getProduction(cleanEmail),
+      this.getNotes(cleanEmail),
+    ]);
+
     return JSON.stringify({
       tenantEmail: cleanEmail,
       businessProfile: profile,
-      version: '3.5.0 (Multi-Tenant SaaS Storage)',
+      version: '4.0.0 (Supabase)',
       timestamp: new Date().toISOString(),
-      data
+      data: {
+        products, sales, expenses, wastage, staff, attendance,
+        closings, deductions, monthly_closings: monthlyClosings,
+        production, notes,
+      },
     }, null, 2);
   },
 
   async importAllData(email: string, jsonData: string): Promise<boolean> {
     const cleanEmail = email.trim().toLowerCase();
+    const branchId = await getBranchId(cleanEmail);
+
     try {
       const parsed = JSON.parse(jsonData);
       if (!parsed.data) return false;
-      
-      for (const [key, storageKey] of Object.entries(STORAGE_KEYS)) {
-        const items = parsed.data[key.toLowerCase()];
-        if (Array.isArray(items)) {
-          await saveToStorage(storageKey, items, cleanEmail);
+      const d = parsed.data;
+
+      // Import products
+      if (Array.isArray(d.products)) {
+        for (const p of d.products) {
+          await supabase.from('products').upsert({
+            id: p.id,
+            branch_id: branchId,
+            name: p.name,
+            category: p.category,
+            price: p.price,
+            stock: p.stock,
+            unit: p.unit,
+            barcode: p.barcode || null,
+          });
         }
       }
 
+      // Import expenses
+      if (Array.isArray(d.expenses)) {
+        for (const e of d.expenses) {
+          await supabase.from('expenses').insert({
+            id: e.id,
+            branch_id: branchId,
+            description: e.description,
+            amount: e.amount,
+            category: e.category,
+            date: e.date,
+          });
+        }
+      }
+
+      // Import staff
+      if (Array.isArray(d.staff)) {
+        for (const s of d.staff) {
+          await supabase.from('staff').insert({
+            id: s.id,
+            branch_id: branchId,
+            name: s.name,
+            designation: s.designation,
+            monthly_salary: s.monthlySalary,
+            join_date: s.joinDate,
+          });
+        }
+      }
+
+      // Import notes
+      if (Array.isArray(d.notes)) {
+        for (const n of d.notes) {
+          await supabase.from('daily_notes').insert({
+            id: n.id,
+            branch_id: branchId,
+            title: n.title,
+            content: n.content,
+            priority: n.priority,
+            status: n.status,
+            assigned_to: n.assignedTo || null,
+            author: n.author,
+            pinned: n.pinned || false,
+            created_at: n.createdAt,
+          });
+        }
+      }
+
+      // Update profile if provided
       if (parsed.businessProfile) {
         await this.updateProfile(cleanEmail, parsed.businessProfile);
       }
+
       return true;
     } catch (e) {
-      console.error("Import error in storageService:", e);
+      console.error('Import error:', e);
       return false;
     }
-  }
+  },
 };

@@ -10,11 +10,10 @@ import {
   AlertCircle, 
   Check, 
   Loader2, 
-  Sparkles 
+  Sparkles,
+  MailCheck
 } from 'lucide-react';
-import { storageService } from '../services/storageService';
-import { UserProfile } from '../types';
-import { generateId } from '../services/idGenerator';
+import { supabase } from '../services/supabaseClient';
 
 interface Props {
   onLogin: (email: string) => void;
@@ -36,8 +35,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showVerifyNotice, setShowVerifyNotice] = useState(false);
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -45,34 +45,36 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    setTimeout(() => {
-      try {
-        const profiles = storageService.getProfiles();
-        const user = profiles.find(p => p.email.toLowerCase() === cleanEmail);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      });
 
-        if (!user) {
-          setError('এই ইমেইলে কোনো একাউন্ট পাওয়া যায়নি। নতুন একাউন্ট খুলুন।');
-          setLoading(false);
-          return;
+      if (error) {
+        if (error.message.includes('Email not confirmed') || error.message.includes('not confirmed')) {
+          setShowVerifyNotice(true);
+          setError('আপনার ইমেইল ভেরিফাই করা হয়নি। ইমেইলে পাঠানো লিংকে ক্লিক করুন।');
+        } else if (error.message.includes('Invalid login credentials')) {
+          setError('ভুল ইমেইল বা পাসওয়ার্ড! আবার চেষ্টা করুন।');
+        } else {
+          setError(error.message || 'Login failed.');
         }
-
-        if (user.password && user.password !== password) {
-          setError('ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।');
-          setLoading(false);
-          return;
-        }
-
-        storageService.updateProfile(cleanEmail, { lastLogin: new Date().toISOString() });
-        onLogin(cleanEmail);
-      } catch (err: any) {
-        setError(err.message || 'Login failed.');
-      } finally {
         setLoading(false);
+        return;
       }
-    }, 300);
+
+      if (data.user) {
+        onLogin(cleanEmail);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -89,55 +91,52 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     }
 
     if (password.length < 8) {
-      setError('পাসওয়ার্ড কমপক্ষে ৮ ডিজিট (8 characters) হতে হবে');
+      setError('পাসওয়ার্ড কমপক্ষে ৮ ডিজিট (8 characters) হতে হবে');
       setLoading(false);
       return;
     }
 
-    const passwordRegex = /^.{8,}$/;
-    if (!passwordRegex.test(password)) {
-      setError('পাসওয়ার্ড সঠিক ফরম্যাটে নেই (কমপক্ষে ৮ ডিজিট আবশ্যক)');
-      setLoading(false);
-      return;
-    }
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            full_name: cleanOwner || cleanBusiness,
+            business_name: cleanBusiness,
+            owner_name: cleanOwner || cleanBusiness,
+          },
+        },
+      });
 
-    setTimeout(async () => {
-      try {
-        const profiles = storageService.getProfiles();
-        if (profiles.some(p => p.email.toLowerCase() === cleanEmail)) {
-          setError('এই ইমেইল দিয়ে আগেই একাউন্ট খোলা হয়েছে। লগইন করুন।');
-          setLoading(false);
-          return;
+      if (error) {
+        if (error.message.includes('already registered') || error.message.includes('already been registered')) {
+          setError('এই ইমেইল দিয়ে আগেই একাউন্ট খোলা হয়েছে। লগইন করুন।');
+        } else {
+          setError(error.message || 'Registration failed.');
         }
-
-        const newProfile: UserProfile = {
-          id: generateId('usr'),
-          email: cleanEmail,
-          username: cleanEmail.split('@')[0] || 'bakery',
-          businessName: cleanBusiness,
-          ownerName: cleanOwner || cleanBusiness,
-          password: password,
-          managerPin: '123456',
-          currencySymbol: '৳',
-          receiptFooter: `Thank you for shopping at ${cleanBusiness}!`,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
-        };
-
-        storageService.saveProfile(newProfile);
-        storageService.setManagerPin(cleanEmail, '123456');
-
-        setBusinessName('');
-        setOwnerName('');
-        setPassword('');
-        setIsRegister(false);
-        setSuccess('রেজিস্ট্রেশন সফল হয়েছে! অনুগ্রহ করে পাসওয়ার্ড দিয়ে লগইন করুন।');
         setLoading(false);
-      } catch (err: any) {
-        setError(err.message || 'Registration failed.');
-        setLoading(false);
+        return;
       }
-    }, 350);
+
+      setBusinessName('');
+      setOwnerName('');
+      setPassword('');
+      setIsRegister(false);
+      
+      if (data.user && !data.session) {
+        // Email verification required
+        setShowVerifyNotice(true);
+        setSuccess('রেজিস্ট্রেশন সফল! আপনার ইমেইলে একটি ভেরিফিকেশন লিংক পাঠানো হয়েছে। লিংকে ক্লিক করে ইমেইল ভেরিফাই করুন, তারপর লগইন করুন।');
+      } else if (data.session) {
+        // Auto-confirmed (email confirmation disabled)
+        onLogin(cleanEmail);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -164,6 +163,19 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         {/* Card */}
         <div className="bg-[#09111f]/95 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] p-6 sm:p-7 border border-[#162744] backdrop-blur-xl">
           
+          {/* Email Verification Notice */}
+          {showVerifyNotice && (
+            <div className="mb-5 bg-[#00e5ff]/10 border border-[#00e5ff]/30 p-4 rounded-2xl flex items-start gap-3">
+              <MailCheck size={20} className="text-[#00e5ff] shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-[#00e5ff] mb-1">ইমেইল ভেরিফিকেশন প্রয়োজন</p>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  আপনার ইমেইলে একটি ভেরিফিকেশন লিংক পাঠানো হয়েছে। ইমেইল চেক করে লিংকে ক্লিক করুন, তারপর লগইন করুন।
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Simple Tab Switcher */}
           <div className="flex items-center p-1 bg-[#050b14] border border-[#162a45] rounded-2xl mb-5">
             <button 
@@ -176,6 +188,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 setOwnerName(''); 
                 setError(''); 
                 setSuccess(''); 
+                setShowVerifyNotice(false);
               }} 
               className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 !isRegister 
@@ -197,6 +210,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 setOwnerName(''); 
                 setError(''); 
                 setSuccess(''); 
+                setShowVerifyNotice(false);
               }} 
               className={`flex-1 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 isRegister 
@@ -244,7 +258,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#00d2ff] flex items-center gap-1.5">
-                  <Lock size={13} /> পাসওয়ার্ড (Password)
+                  <Lock size={13} /> পাসওয়ার্ড (Password)
                 </label>
                 <input 
                   required 
@@ -307,7 +321,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-[#00d2ff] flex items-center gap-1.5">
-                  <Lock size={13} /> পাসওয়ার্ড (Password)
+                  <Lock size={13} /> পাসওয়ার্ড (Password)
                 </label>
                 <input 
                   required 
@@ -328,18 +342,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
               </button>
             </form>
           )}
-
-          {/* Demo Link */}
-          <div className="mt-5 pt-4 border-t border-[#162744] flex items-center justify-center">
-            <button 
-              type="button" 
-              onClick={() => onLogin('demo@bakery.com')} 
-              className="text-xs font-bold text-slate-400 hover:text-[#00e5ff] transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Sparkles size={14} className="text-[#00e5ff]" />
-              <span>ডেমো স্টোর সরাসরি দেখুন (Live Demo)</span>
-            </button>
-          </div>
 
         </div>
 
