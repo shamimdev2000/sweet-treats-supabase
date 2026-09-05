@@ -241,7 +241,7 @@ export const storageService = {
     if (updates.managerPin !== undefined) dbUpdates.manager_pin = updates.managerPin;
     if (updates.currencySymbol !== undefined) dbUpdates.currency_symbol = updates.currencySymbol;
     if (updates.receiptFooter !== undefined) dbUpdates.receipt_footer = updates.receiptFooter;
-    if (updates.full_name !== undefined) dbUpdates.full_name = updates.full_name;
+
 
     if (Object.keys(dbUpdates).length === 0) {
       return await this.getProfileByEmailAsync(cleanEmail);

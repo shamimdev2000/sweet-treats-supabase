@@ -17,6 +17,7 @@ import ProductionView from './components/ProductionView';
 import DailyNotesView from './components/DailyNotesView';
 import Login from './components/Login';
 import { storageService } from './services/storageService';
+import { supabase } from './services/supabaseClient';
 import { 
   LayoutDashboard, 
   Package, 
@@ -106,19 +107,56 @@ const App: React.FC = () => {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   useEffect(() => {
-    const savedEmail = localStorage.getItem('sweetBakery_email');
-    if (savedEmail) {
-      const cleanEmail = savedEmail.toLowerCase();
-      setUserEmail(cleanEmail);
-      const prof = storageService.getProfileByEmail(cleanEmail);
-      setUserProfile(prof);
-      const pin = storageService.getManagerPin(cleanEmail);
-      setManagerPassword(pin);
-      setIsAuthenticated(true);
-      setCurrentView(View.SALES);
-    } else {
-      setIsDataLoaded(true); 
-    }
+    let mounted = true;
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (session?.user) {
+        const cleanEmail = (session.user.email || '').toLowerCase();
+        setUserEmail(cleanEmail);
+        setIsAuthenticated(true);
+        setCurrentView(View.SALES);
+
+        const prof = await storageService.getProfileByEmailAsync(cleanEmail);
+        if (mounted) setUserProfile(prof);
+
+        const pin = await storageService.getManagerPinAsync(cleanEmail);
+        if (mounted) setManagerPassword(pin);
+      } else {
+        setIsDataLoaded(true);
+      }
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      (async () => {
+        if (event === 'SIGNED_OUT' || !session?.user) {
+          setIsAuthenticated(false);
+          setUserEmail('');
+          setUserProfile(null);
+          setIsDataLoaded(true);
+          setIsManagerAuthenticated(false);
+          setIsAdminPanelOpen(false);
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          const cleanEmail = (session.user.email || '').toLowerCase();
+          setUserEmail(cleanEmail);
+          setIsAuthenticated(true);
+          setCurrentView(View.SALES);
+
+          const prof = await storageService.getProfileByEmailAsync(cleanEmail);
+          if (mounted) setUserProfile(prof);
+
+          const pin = await storageService.getManagerPinAsync(cleanEmail);
+          if (mounted) setManagerPassword(pin);
+        }
+      })();
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -244,16 +282,17 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated, userEmail, fetchData]);
 
-  const handleLogin = (email: string) => {
+  const handleLogin = async (email: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     setUserEmail(normalizedEmail);
-    const prof = storageService.getProfileByEmail(normalizedEmail);
-    setUserProfile(prof);
-    const pin = storageService.getManagerPin(normalizedEmail);
-    setManagerPassword(pin);
     setIsAuthenticated(true);
     setCurrentView(View.SALES);
-    localStorage.setItem('sweetBakery_email', normalizedEmail);
+
+    const prof = await storageService.getProfileByEmailAsync(normalizedEmail);
+    setUserProfile(prof);
+
+    const pin = await storageService.getManagerPinAsync(normalizedEmail);
+    setManagerPassword(pin);
   };
 
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
@@ -266,17 +305,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = useCallback(() => {
-    console.log('Logging out...');
-    localStorage.removeItem('sweetBakery_email');
-    
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut();
     setIsAuthenticated(false);
     setUserEmail('');
+    setUserProfile(null);
+    setIsManagerAuthenticated(false);
+    setIsAdminPanelOpen(false);
     setIsMobileMenuOpen(false);
-    
-    setTimeout(() => {
-      window.location.href = window.location.origin;
-    }, 100);
   }, []);
 
   const withSync = async (fn: () => Promise<void>) => {
@@ -610,11 +646,6 @@ const App: React.FC = () => {
         } catch (err) {
           console.error("Failed to clear DB during reset:", err);
         }
-        const profiles = localStorage.getItem('sweetBakery_profiles');
-        localStorage.clear();
-        if (profiles) {
-          localStorage.setItem('sweetBakery_profiles', profiles);
-        }
         window.location.reload();
       }
     });
@@ -699,8 +730,6 @@ const App: React.FC = () => {
     setManagerPassword(newPass);
     if (userEmail) {
       storageService.setManagerPin(userEmail, newPass);
-    } else {
-      localStorage.setItem('sweetBakery_managerPass', newPass);
     }
   };
 
