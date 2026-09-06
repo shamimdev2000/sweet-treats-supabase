@@ -43,7 +43,7 @@ const MonthlyClosingView: React.FC<Props> = ({
   onCloseMonth, 
   onDeleteMonthlyClosing, 
   currentUser,
-  managerPassword = '1234'
+  managerPassword = ''
 }) => {
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();

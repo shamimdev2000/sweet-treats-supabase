@@ -1,9 +1,9 @@
 
 {
-  "id": "com.sweettreats.manager",
-  "name": "Sweet Treats Corporation Manager",
-  "short_name": "Sweet Treats",
-  "description": "Professional Management System for Sweet Treats Corporation",
+  "id": "com.bakery.manager",
+  "name": "Bakery Management System",
+  "short_name": "Bakery Manager",
+  "description": "Professional Point of Sale and Operations Management System for Bakeries",
   "start_url": "/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "minimal-ui"],

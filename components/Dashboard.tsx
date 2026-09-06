@@ -231,7 +231,7 @@ const Dashboard: React.FC<Props> = ({ products = [], sales = [], expenses = [], 
           <div>
             <div className="flex items-center justify-center md:justify-start gap-2.5">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight">
-                SWEET TREATS
+                BAKERY MANAGEMENT
               </h1>
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-md bg-[#00e5ff]/15 text-[#00e5ff] border border-[#00e5ff]/40 uppercase tracking-widest">
                 DASHBOARD

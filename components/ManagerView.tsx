@@ -59,7 +59,7 @@ const ManagerView: React.FC<Props> = ({
   const [isChangingPass, setIsChangingPass] = useState(false);
 
   // Business Profile Form state
-  const [businessName, setBusinessName] = useState(profile?.businessName || 'Sweet Treats Corporation');
+  const [businessName, setBusinessName] = useState(profile?.businessName || 'My Bakery');
   const [ownerName, setOwnerName] = useState(profile?.ownerName || username.split('@')[0]);
   const [phone, setPhone] = useState(profile?.phone || '');
   const [address, setAddress] = useState(profile?.address || '');
@@ -69,7 +69,7 @@ const ManagerView: React.FC<Props> = ({
 
   useEffect(() => {
     if (profile) {
-      setBusinessName(profile.businessName || 'Sweet Treats Corporation');
+      setBusinessName(profile.businessName || 'My Bakery');
       setOwnerName(profile.ownerName || username.split('@')[0]);
       setPhone(profile.phone || '');
       setAddress(profile.address || '');
@@ -133,7 +133,7 @@ const ManagerView: React.FC<Props> = ({
           <div className="text-center md:text-left flex-1">
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-1.5">
               <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">
-                {profile?.businessName || 'Sweet Treats Corporation'}
+                {profile?.businessName || 'Bakery Store'}
               </h2>
               <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full border border-emerald-500/20">
                 Isolated SaaS Account

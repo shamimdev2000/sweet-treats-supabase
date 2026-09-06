@@ -136,6 +136,26 @@ export interface DailyNote {
   pinned?: boolean;
 }
 
+export interface Branch {
+  id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  phone?: string;
+  isMain?: boolean;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BranchMembership {
+  id: string;
+  userId: string;
+  branchId: string;
+  role: 'owner' | 'admin' | 'manager' | 'cashier' | 'staff' | 'user';
+  createdAt: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -148,9 +168,10 @@ export interface UserProfile {
   managerPin: string;
   currencySymbol?: string;
   receiptFooter?: string;
+  branchId?: string;
+  role?: string;
   createdAt: string;
   lastLogin?: string;
-  starterPack?: boolean;
 }
 
 export enum View {

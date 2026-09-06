@@ -24,7 +24,7 @@ async function startServer() {
     const profit = totalSales - totalExpenses;
     
     const prompt = `
-      As a professional bakery business consultant, analyze the following data for my bakery called "Sweet Treats Corporation".
+      As a professional bakery business consultant, analyze the following operational data for this bakery.
       
       Data Summary:
       - Total Products: ${products.length}

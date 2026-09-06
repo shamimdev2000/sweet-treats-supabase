@@ -17,7 +17,7 @@ import ProductionView from './components/ProductionView';
 import DailyNotesView from './components/DailyNotesView';
 import Login from './components/Login';
 import { storageService } from './services/storageService';
-import { supabase } from './services/supabaseClient';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { 
   LayoutDashboard, 
   Package, 
@@ -51,7 +51,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.SALES);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
-  const [managerPassword, setManagerPassword] = useState('123456');
+  const [managerPassword, setManagerPassword] = useState('');
   const [showLockModal, setShowLockModal] = useState(false);
   const [lockInput, setLockInput] = useState('');
   const [lockError, setLockError] = useState(false);
@@ -107,55 +107,59 @@ const App: React.FC = () => {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
+    let unsubscribeAuth: (() => void) | undefined;
 
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      if (session?.user) {
-        const cleanEmail = (session.user.email || '').toLowerCase();
-        setUserEmail(cleanEmail);
-        setIsAuthenticated(true);
-        setCurrentView(View.SALES);
-
-        const prof = await storageService.getProfileByEmailAsync(cleanEmail);
-        if (mounted) setUserProfile(prof);
-
-        const pin = await storageService.getManagerPinAsync(cleanEmail);
-        if (mounted) setManagerPassword(pin);
-      } else {
+    if (isSupabaseConfigured && supabase) {
+      // Check active Supabase Auth session
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user?.email) {
+          const cleanEmail = session.user.email.toLowerCase();
+          setUserEmail(cleanEmail);
+          const remoteProf = await storageService.fetchRemoteProfile(session.user.id);
+          const prof = remoteProf || storageService.getProfileByEmail(cleanEmail);
+          setUserProfile(prof);
+          const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+          setManagerPassword(pin);
+          setIsAuthenticated(true);
+          setCurrentView(View.SALES);
+        }
         setIsDataLoaded(true);
-      }
-    })();
+      });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      (async () => {
-        if (event === 'SIGNED_OUT' || !session?.user) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user?.email) {
+          const cleanEmail = session.user.email.toLowerCase();
+          setUserEmail(cleanEmail);
+          const remoteProf = await storageService.fetchRemoteProfile(session.user.id);
+          const prof = remoteProf || storageService.getProfileByEmail(cleanEmail);
+          setUserProfile(prof);
+          const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+          setManagerPassword(pin);
+          setIsAuthenticated(true);
+        } else if (event === 'SIGNED_OUT') {
           setIsAuthenticated(false);
           setUserEmail('');
           setUserProfile(null);
-          setIsDataLoaded(true);
-          setIsManagerAuthenticated(false);
-          setIsAdminPanelOpen(false);
-        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          const cleanEmail = (session.user.email || '').toLowerCase();
-          setUserEmail(cleanEmail);
-          setIsAuthenticated(true);
-          setCurrentView(View.SALES);
-
-          const prof = await storageService.getProfileByEmailAsync(cleanEmail);
-          if (mounted) setUserProfile(prof);
-
-          const pin = await storageService.getManagerPinAsync(cleanEmail);
-          if (mounted) setManagerPassword(pin);
         }
-      })();
-    });
+      });
+      unsubscribeAuth = () => subscription.unsubscribe();
+    } else {
+      const savedEmail = localStorage.getItem('sweetBakery_email');
+      if (savedEmail) {
+        const cleanEmail = savedEmail.toLowerCase();
+        setUserEmail(cleanEmail);
+        const prof = storageService.getProfileByEmail(cleanEmail);
+        setUserProfile(prof);
+        const pin = storageService.getManagerPin(cleanEmail);
+        setManagerPassword(pin);
+        setIsAuthenticated(true);
+        setCurrentView(View.SALES);
+      }
+      setIsDataLoaded(true);
+    }
 
     return () => {
-      mounted = false;
-      authListener.subscription.unsubscribe();
+      if (unsubscribeAuth) unsubscribeAuth();
     };
   }, []);
 
@@ -282,17 +286,16 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated, userEmail, fetchData]);
 
-  const handleLogin = async (email: string) => {
+  const handleLogin = (email: string) => {
     const normalizedEmail = email.toLowerCase().trim();
     setUserEmail(normalizedEmail);
+    const prof = storageService.getProfileByEmail(normalizedEmail);
+    setUserProfile(prof);
+    const pin = storageService.getManagerPin(normalizedEmail);
+    setManagerPassword(pin);
     setIsAuthenticated(true);
     setCurrentView(View.SALES);
-
-    const prof = await storageService.getProfileByEmailAsync(normalizedEmail);
-    setUserProfile(prof);
-
-    const pin = await storageService.getManagerPinAsync(normalizedEmail);
-    setManagerPassword(pin);
+    localStorage.setItem('sweetBakery_email', normalizedEmail);
   };
 
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
@@ -306,13 +309,24 @@ const App: React.FC = () => {
   };
 
   const handleLogout = useCallback(async () => {
-    await supabase.auth.signOut();
+    console.log('Logging out...');
+    localStorage.removeItem('sweetBakery_email');
+    
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Supabase signOut error:", err);
+      }
+    }
+
     setIsAuthenticated(false);
     setUserEmail('');
-    setUserProfile(null);
-    setIsManagerAuthenticated(false);
-    setIsAdminPanelOpen(false);
     setIsMobileMenuOpen(false);
+    
+    setTimeout(() => {
+      window.location.href = window.location.origin;
+    }, 100);
   }, []);
 
   const withSync = async (fn: () => Promise<void>) => {
@@ -367,24 +381,12 @@ const App: React.FC = () => {
       onConfirm: () => {
         const sale = sales.find(s => s.id === saleId);
         if (!sale) return;
-        setSales(prev => prev.filter(s => s.id !== saleId));
-        
-        let updatedProducts: Product[] = [];
-        setProducts(prevProducts => {
-          updatedProducts = prevProducts.map(p => {
-            const saleItem = sale.items.find(item => item.productId === p.id);
-            if (saleItem) return { ...p, stock: p.stock + saleItem.quantity };
-            return p;
-          });
-          return updatedProducts;
-        });
 
         withSync(async () => {
           await storageService.deleteSale(userEmail, saleId);
-          for (const item of sale.items) {
-            const product = updatedProducts.find(p => p.id === item.productId);
-            if (product) await storageService.upsertProduct(userEmail, product);
-          }
+          setSales(prev => prev.filter(s => s.id !== saleId));
+          const refreshedProducts = await storageService.getProducts(userEmail);
+          setProducts(refreshedProducts);
         });
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
@@ -646,6 +648,11 @@ const App: React.FC = () => {
         } catch (err) {
           console.error("Failed to clear DB during reset:", err);
         }
+        const profiles = localStorage.getItem('sweetBakery_profiles');
+        localStorage.clear();
+        if (profiles) {
+          localStorage.setItem('sweetBakery_profiles', profiles);
+        }
         window.location.reload();
       }
     });
@@ -730,6 +737,8 @@ const App: React.FC = () => {
     setManagerPassword(newPass);
     if (userEmail) {
       storageService.setManagerPin(userEmail, newPass);
+    } else {
+      localStorage.setItem('sweetBakery_managerPass', newPass);
     }
   };
 
@@ -821,8 +830,12 @@ const App: React.FC = () => {
               <UtensilsCrossed size={22} className="text-[#00e5ff]" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-slate-900 dark:text-white leading-none">Sweet Treats</h1>
-              <h1 className="text-lg font-black text-[#00e5ff] leading-tight">Corporation</h1>
+              <h1 className="text-lg font-black text-slate-900 dark:text-white leading-none">
+                {userProfile?.businessName ? userProfile.businessName.split(' ')[0] : 'Bakery'}
+              </h1>
+              <h1 className="text-lg font-black text-[#00e5ff] leading-tight">
+                {userProfile?.businessName ? userProfile.businessName.split(' ').slice(1).join(' ') || 'Store' : 'Manager'}
+              </h1>
             </div>
           </div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 hover:text-white p-2 cursor-pointer transition-colors"><X size={24} /></button>

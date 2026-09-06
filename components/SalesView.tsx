@@ -415,8 +415,8 @@ const SalesView: React.FC<Props> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-[#00e5ff] shadow-[0_0_10px_#00e5ff] animate-pulse"></span>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm sm:text-base font-black tracking-wider text-white">
-                  SWEET TREATS
+                <span className="text-sm sm:text-base font-black tracking-wider text-white truncate max-w-[200px]">
+                  {businessProfile?.businessName?.toUpperCase() || 'BAKERY STORE'}
                 </span>
                 <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[#00e5ff]/15 text-[#00e5ff] border border-[#00e5ff]/40 uppercase tracking-widest">
                   POS
@@ -1157,7 +1157,7 @@ const SalesView: React.FC<Props> = ({
             {/* Printable Receipt */}
             <div id="printable-pos-receipt" className="space-y-3 text-center">
               <div className="border-b-2 border-black pb-2">
-                <h2 className="text-base font-black uppercase tracking-wider">{businessProfile?.businessName || 'SWEET TREATS BAKERY'}</h2>
+                <h2 className="text-base font-black uppercase tracking-wider">{businessProfile?.businessName || 'BAKERY STORE'}</h2>
                 {businessProfile?.address && <p className="text-[10px] text-gray-700">{businessProfile.address}</p>}
                 <p className="text-[10px] text-gray-700">{businessProfile?.phone ? `Phone: ${businessProfile.phone}` : 'Smart POS Terminal'}</p>
               </div>
