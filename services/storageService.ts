@@ -86,12 +86,7 @@ export async function getActiveBranchId(email?: string): Promise<string | null> 
     const userId = await getActiveUserId();
     if (!userId) return null;
 
-    if (email) {
-      const cached = storageService.getProfileByEmail(email);
-      if (cached?.branchId) return cached.branchId;
-    }
-
-    // 1. Query profiles.branch_id
+    // 1. Query profiles.branch_id from Supabase (authoritative source)
     const { data: prof } = await supabase
       .from('profiles')
       .select('branch_id')
@@ -110,7 +105,13 @@ export async function getActiveBranchId(email?: string): Promise<string | null> 
 
     if (mem?.branch_id) return mem.branch_id;
 
-    // 3. Fallback: provision or resolve default branch via hardened SECURITY DEFINER function
+    // 3. Fallback to cached profile if available
+    if (email) {
+      const cached = storageService.getProfileByEmail(email);
+      if (cached?.branchId) return cached.branchId;
+    }
+
+    // 4. Fallback: provision or resolve default branch via hardened SECURITY DEFINER function
     const { data: defaultBranchId } = await supabase.rpc('ensure_default_branch');
     if (defaultBranchId) return defaultBranchId;
 
@@ -402,14 +403,19 @@ export const storageService = {
   // --------------------------------------------------------------------------
   async getProducts(email: string): Promise<Product[]> {
     if (isSupabaseConfigured && supabase) {
+      const userId = await getActiveUserId();
       const branchId = await getActiveBranchId(email);
       let query = supabase
         .from('products')
         .select('*')
         .order('name', { ascending: true });
 
-      if (branchId) {
+      if (branchId && userId) {
+        query = query.or(`branch_id.eq.${branchId},and(branch_id.is.null,user_id.eq.${userId})`);
+      } else if (branchId) {
         query = query.eq('branch_id', branchId);
+      } else if (userId) {
+        query = query.eq('user_id', userId);
       }
 
       const { data, error } = await query;
@@ -437,9 +443,9 @@ export const storageService = {
         const userId = await requireAuthUserId();
         if (userId) {
           const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: product.id,
-            user_id: userId,
+
+          // 1. Try to update existing product first (avoids changing branch_id or violating RLS insert permissions)
+          const updatePayload: any = {
             name: product.name,
             category: product.category,
             price: product.price,
@@ -448,12 +454,35 @@ export const storageService = {
             barcode: product.barcode || null,
             updated_at: new Date().toISOString()
           };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('products').upsert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase upsertProduct warning:", error.message);
+
+          const { data: updatedRows, error: updateErr } = await supabase
+            .from('products')
+            .update(updatePayload)
+            .eq('id', product.id)
+            .select('id');
+
+          // 2. If row does not exist in DB yet, insert it with user_id and branch_id
+          if (!updateErr && (!updatedRows || updatedRows.length === 0)) {
+            const insertPayload: any = {
+              id: product.id,
+              user_id: userId,
+              name: product.name,
+              category: product.category,
+              price: product.price,
+              stock: product.stock,
+              unit: product.unit,
+              barcode: product.barcode || null,
+              updated_at: new Date().toISOString()
+            };
+            if (branchId) {
+              insertPayload.branch_id = branchId;
+            }
+            const { error: insertErr } = await supabase.from('products').insert(insertPayload);
+            if (insertErr && !isPgrstMissingTableError(insertErr)) {
+              console.warn("Supabase insertProduct warning:", insertErr.message);
+            }
+          } else if (updateErr && !isPgrstMissingTableError(updateErr)) {
+            console.warn("Supabase updateProduct warning:", updateErr.message);
           }
         }
       } catch (err) {
