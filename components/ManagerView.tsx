@@ -25,11 +25,13 @@ import {
   Database,
   UploadCloud,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Activity
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { storageService } from '../services/storageService';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
+import { SETUP_SCHEMA_SQL } from '../services/schemaSql';
 
 interface Props {
   username: string;
@@ -64,6 +66,7 @@ const ManagerView: React.FC<Props> = ({
   const [confirmPass, setConfirmPass] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [isTestingConn, setIsTestingConn] = useState(false);
 
   const handleSyncToSupabase = async () => {
     setIsSyncingCloud(true);
@@ -84,12 +87,35 @@ const ManagerView: React.FC<Props> = ({
 
   const handleCopySchemaSql = async () => {
     try {
-      // Fetch or copy schema instructions
-      const instructions = `-- Open Supabase Dashboard -> SQL Editor -> Run setup_schema.sql located in project /supabase/setup_schema.sql`;
-      await navigator.clipboard.writeText(instructions);
-      toast.success("Copied schema note! Open Supabase SQL Editor and run setup_schema.sql to enable instant cloud sync.");
+      await navigator.clipboard.writeText(SETUP_SCHEMA_SQL);
+      toast.success("Copied complete setup_schema.sql to clipboard! Paste it into Supabase SQL Editor and click RUN.");
     } catch {
-      toast.info("Please run the script in /supabase/setup_schema.sql in your Supabase SQL Editor.");
+      toast.info("Please copy the script in /supabase/setup_schema.sql into your Supabase SQL Editor.");
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setIsTestingConn(true);
+    const toastId = toast.loading("Testing Supabase products & profiles tables...");
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        toast.error("Supabase client is not configured.", { id: toastId });
+        return;
+      }
+      const { data, error } = await supabase.from('products').select('id').limit(1);
+      if (error) {
+        if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
+          toast.error("Tables not found in Supabase schema cache yet. Please run setup_schema.sql in Supabase SQL Editor, then click 'Reload Schema Cache' in Supabase Settings -> API.", { id: toastId, duration: 8000 });
+        } else {
+          toast.error(`Database error: ${error.message} (${error.code})`, { id: toastId, duration: 6000 });
+        }
+      } else {
+        toast.success("Connection healthy! Products table is active in Supabase cloud.", { id: toastId });
+      }
+    } catch (e: any) {
+      toast.error(`Test failed: ${e.message}`, { id: toastId });
+    } finally {
+      setIsTestingConn(false);
     }
   };
 
@@ -429,15 +455,32 @@ const ManagerView: React.FC<Props> = ({
 
               <button
                 type="button"
+                onClick={handleTestConnection}
+                disabled={isTestingConn}
+                className="w-full p-2.5 bg-slate-50 dark:bg-[#0a1527] hover:border-[#00e5ff]/50 border border-slate-200 dark:border-[#162744] rounded-xl text-left flex items-center justify-between cursor-pointer transition-all text-xs disabled:opacity-60"
+              >
+                <div className="flex items-center gap-2">
+                  <Activity size={15} className="text-[#00e5ff]" />
+                  <span className="text-slate-600 dark:text-slate-300 font-semibold text-xs">
+                    {isTestingConn ? 'Checking Supabase...' : 'Test Connection & Schema'}
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-[#00e5ff] flex items-center gap-1 hover:text-white">
+                  Run Diagnostic
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleCopySchemaSql}
                 className="w-full p-2.5 bg-slate-50 dark:bg-[#0a1527] hover:border-[#00e5ff]/50 border border-slate-200 dark:border-[#162744] rounded-xl text-left flex items-center justify-between cursor-pointer transition-all text-xs"
               >
                 <div className="flex items-center gap-2">
                   <Database size={15} className="text-slate-400" />
-                  <span className="text-slate-600 dark:text-slate-300 font-semibold text-xs">Schema File: <code className="font-mono text-[10px] text-[#00e5ff]">setup_schema.sql</code></span>
+                  <span className="text-slate-600 dark:text-slate-300 font-semibold text-xs">Copy Full <code className="font-mono text-[10px] text-[#00e5ff]">setup_schema.sql</code></span>
                 </div>
                 <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 hover:text-white">
-                  <Copy size={12} /> Instructions
+                  <Copy size={12} /> Copy SQL
                 </span>
               </button>
             </div>

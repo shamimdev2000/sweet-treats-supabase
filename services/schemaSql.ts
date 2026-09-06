@@ -1,14 +1,12 @@
--- ============================================================================
+export const SETUP_SCHEMA_SQL = `-- ============================================================================
 -- BAKERY & SWEET SHOP MANAGEMENT SYSTEM - COMPLETE IDEMPOTENT DATABASE SCHEMA
 -- Target Database: Supabase PostgreSQL (public schema)
--- Safe for execution: Uses IF NOT EXISTS, DO blocks, and non-destructive DDL
 -- ============================================================================
 
--- Step 1: Enable Required Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Step 2: Create Branches Table
+-- Branches
 CREATE TABLE IF NOT EXISTS public.branches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -21,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.branches (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 3: Create Profiles Table (Linked to auth.users)
+-- Profiles
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
@@ -40,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     last_login TIMESTAMPTZ
 );
 
--- Step 4: Create Branch Memberships Table
+-- Branch Memberships
 CREATE TABLE IF NOT EXISTS public.branch_memberships (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -50,7 +48,7 @@ CREATE TABLE IF NOT EXISTS public.branch_memberships (
     UNIQUE(user_id, branch_id)
 );
 
--- Step 5: Create Products Table
+-- Products
 CREATE TABLE IF NOT EXISTS public.products (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -65,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.products (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 6: Create Sales Table
+-- Sales
 CREATE TABLE IF NOT EXISTS public.sales (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -83,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.sales (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 7: Create Sale Items Table
+-- Sale Items
 CREATE TABLE IF NOT EXISTS public.sale_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sale_id TEXT NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
@@ -96,7 +94,7 @@ CREATE TABLE IF NOT EXISTS public.sale_items (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 8: Create Sale Payments Table
+-- Sale Payments
 CREATE TABLE IF NOT EXISTS public.sale_payments (
     id TEXT PRIMARY KEY,
     sale_id TEXT NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
@@ -106,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.sale_payments (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 9: Create Expenses Table
+-- Expenses
 CREATE TABLE IF NOT EXISTS public.expenses (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -118,7 +116,7 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 10: Create Wastage Table
+-- Wastage
 CREATE TABLE IF NOT EXISTS public.wastage (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -133,7 +131,7 @@ CREATE TABLE IF NOT EXISTS public.wastage (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 11: Create Staff Table
+-- Staff
 CREATE TABLE IF NOT EXISTS public.staff (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -145,7 +143,7 @@ CREATE TABLE IF NOT EXISTS public.staff (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 12: Create Attendance Table
+-- Attendance
 CREATE TABLE IF NOT EXISTS public.attendance (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -157,7 +155,7 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     CONSTRAINT unique_staff_date_per_user UNIQUE (user_id, staff_id, date)
 );
 
--- Step 13: Create Deductions Table
+-- Deductions
 CREATE TABLE IF NOT EXISTS public.deductions (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -169,7 +167,7 @@ CREATE TABLE IF NOT EXISTS public.deductions (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 14: Create Daily Closings Table
+-- Daily Closings
 CREATE TABLE IF NOT EXISTS public.daily_closings (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -189,7 +187,7 @@ CREATE TABLE IF NOT EXISTS public.daily_closings (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 15: Create Monthly Closings Table
+-- Monthly Closings
 CREATE TABLE IF NOT EXISTS public.monthly_closings (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -207,7 +205,7 @@ CREATE TABLE IF NOT EXISTS public.monthly_closings (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 16: Create Production Table
+-- Production
 CREATE TABLE IF NOT EXISTS public.production (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -222,7 +220,7 @@ CREATE TABLE IF NOT EXISTS public.production (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Step 17: Create Daily Notes Table
+-- Daily Notes
 CREATE TABLE IF NOT EXISTS public.daily_notes (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -237,7 +235,7 @@ CREATE TABLE IF NOT EXISTS public.daily_notes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- Step 18: Indexes for Query Performance
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_products_user_branch ON public.products(user_id, branch_id);
 CREATE INDEX IF NOT EXISTS idx_sales_user_date ON public.sales(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON public.sale_items(sale_id);
@@ -252,7 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_monthly_closings_user ON public.monthly_closings(
 CREATE INDEX IF NOT EXISTS idx_production_user ON public.production(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_notes_user ON public.daily_notes(user_id);
 
--- Step 19: Enable Row Level Security (RLS)
+-- Enable RLS
 ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branch_memberships ENABLE ROW LEVEL SECURITY;
@@ -270,7 +268,7 @@ ALTER TABLE public.monthly_closings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.production ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_notes ENABLE ROW LEVEL SECURITY;
 
--- Step 20: Helper Function for Branch Security
+-- Helper RPC
 CREATE OR REPLACE FUNCTION public.ensure_default_branch(p_user_email TEXT DEFAULT NULL)
 RETURNS UUID
 LANGUAGE plpgsql
@@ -290,13 +288,11 @@ BEGIN
         RETURN NULL;
     END IF;
 
-    -- Look for existing branch membership
     SELECT branch_id INTO v_branch_id FROM public.branch_memberships WHERE user_id = v_user_id LIMIT 1;
     IF v_branch_id IS NOT NULL THEN
         RETURN v_branch_id;
     END IF;
 
-    -- Look for main branch
     SELECT id INTO v_branch_id FROM public.branches WHERE is_main = true LIMIT 1;
     IF v_branch_id IS NULL THEN
         INSERT INTO public.branches (name, code, is_main, created_by)
@@ -304,24 +300,20 @@ BEGIN
         RETURNING id INTO v_branch_id;
     END IF;
 
-    -- Link membership
     INSERT INTO public.branch_memberships (user_id, branch_id, role)
     VALUES (v_user_id, v_branch_id, 'owner')
     ON CONFLICT (user_id, branch_id) DO NOTHING;
 
-    -- Update profile
     UPDATE public.profiles SET branch_id = v_branch_id WHERE id = v_user_id AND branch_id IS NULL;
 
     RETURN v_branch_id;
 END;
 $$;
 
--- Grant execution to authenticated users
 GRANT EXECUTE ON FUNCTION public.ensure_default_branch(TEXT) TO authenticated, anon;
 
--- Step 21: Non-destructive RLS Policies
+-- Policies
 DO $$ BEGIN
-    -- Profiles Policies
     DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
     CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 
@@ -331,79 +323,64 @@ DO $$ BEGIN
     DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
     CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
-    -- Branches Policies
     DROP POLICY IF EXISTS "Authenticated users can view branches" ON public.branches;
     CREATE POLICY "Authenticated users can view branches" ON public.branches FOR SELECT TO authenticated USING (true);
 
     DROP POLICY IF EXISTS "Authenticated users can insert branches" ON public.branches;
     CREATE POLICY "Authenticated users can insert branches" ON public.branches FOR INSERT TO authenticated WITH CHECK (true);
 
-    -- Branch Memberships
     DROP POLICY IF EXISTS "Members can view their memberships" ON public.branch_memberships;
     CREATE POLICY "Members can view their memberships" ON public.branch_memberships FOR SELECT TO authenticated USING (user_id = auth.uid());
 
     DROP POLICY IF EXISTS "Users can insert memberships" ON public.branch_memberships;
     CREATE POLICY "Users can insert memberships" ON public.branch_memberships FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
 
-    -- Products
     DROP POLICY IF EXISTS "Users manage products" ON public.products;
     CREATE POLICY "Users manage products" ON public.products FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Sales
     DROP POLICY IF EXISTS "Users manage sales" ON public.sales;
     CREATE POLICY "Users manage sales" ON public.sales FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Sale Items
     DROP POLICY IF EXISTS "Users manage sale items" ON public.sale_items;
     CREATE POLICY "Users manage sale items" ON public.sale_items FOR ALL TO authenticated
     USING (EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.user_id = auth.uid()))
     WITH CHECK (EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_items.sale_id AND s.user_id = auth.uid()));
 
-    -- Sale Payments
     DROP POLICY IF EXISTS "Users manage sale payments" ON public.sale_payments;
     CREATE POLICY "Users manage sale payments" ON public.sale_payments FOR ALL TO authenticated
     USING (EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_payments.sale_id AND s.user_id = auth.uid()))
     WITH CHECK (EXISTS (SELECT 1 FROM public.sales s WHERE s.id = sale_payments.sale_id AND s.user_id = auth.uid()));
 
-    -- Expenses
     DROP POLICY IF EXISTS "Users manage expenses" ON public.expenses;
     CREATE POLICY "Users manage expenses" ON public.expenses FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Wastage
     DROP POLICY IF EXISTS "Users manage wastage" ON public.wastage;
     CREATE POLICY "Users manage wastage" ON public.wastage FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Staff
     DROP POLICY IF EXISTS "Users manage staff" ON public.staff;
     CREATE POLICY "Users manage staff" ON public.staff FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Attendance
     DROP POLICY IF EXISTS "Users manage attendance" ON public.attendance;
     CREATE POLICY "Users manage attendance" ON public.attendance FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Deductions
     DROP POLICY IF EXISTS "Users manage deductions" ON public.deductions;
     CREATE POLICY "Users manage deductions" ON public.deductions FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Daily Closings
     DROP POLICY IF EXISTS "Users manage daily closings" ON public.daily_closings;
     CREATE POLICY "Users manage daily closings" ON public.daily_closings FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Monthly Closings
     DROP POLICY IF EXISTS "Users manage monthly closings" ON public.monthly_closings;
     CREATE POLICY "Users manage monthly closings" ON public.monthly_closings FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Production
     DROP POLICY IF EXISTS "Users manage production" ON public.production;
     CREATE POLICY "Users manage production" ON public.production FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
-    -- Daily Notes
     DROP POLICY IF EXISTS "Users manage daily notes" ON public.daily_notes;
     CREATE POLICY "Users manage daily notes" ON public.daily_notes FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 END $$;
 
--- Step 22: Grants for PostgREST & Supabase Roles
+-- Grants for PostgREST & Supabase Roles
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
@@ -413,5 +390,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon,
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
 
--- Reload Schema Cache
 NOTIFY pgrst, 'reload schema';
+`;
