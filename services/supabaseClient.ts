@@ -1,21 +1,28 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+
+// Strip any trailing slashes or accidental /rest/v1 suffixes from the base URL
+const cleanUrl = rawUrl ? rawUrl.replace(/\/+$/, '').replace(/\/rest\/v1\/?$/, '') : undefined;
+const cleanAnonKey = rawKey;
 
 export const isSupabaseConfigured = Boolean(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl.startsWith('https://') &&
-  supabaseAnonKey.length > 20
+  cleanUrl && 
+  cleanAnonKey && 
+  cleanUrl.startsWith('https://') &&
+  cleanAnonKey.length > 20
 );
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!, {
+  ? createClient(cleanUrl!, cleanAnonKey!, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
+      },
+      db: {
+        schema: 'public'
       }
     })
   : null;
@@ -37,21 +44,28 @@ export async function getActiveUserId(): Promise<string | null> {
 }
 
 /**
- * Checks if a Supabase error is caused by missing tables or functions in the PostgREST schema cache
+ * Checks if a Supabase error is caused by missing tables/functions in the PostgREST schema cache or 404
  * (e.g. freshly created Supabase project before database migrations are run).
  */
 export function isPgrstMissingTableError(error: any): boolean {
   if (!error) return false;
+  const status = error.status || error.statusCode;
   const code = error.code;
   const message = typeof error.message === 'string' ? error.message : '';
   const details = typeof error.details === 'string' ? error.details : '';
+  const hint = typeof error.hint === 'string' ? error.hint : '';
   return (
+    status === 404 ||
     code === 'PGRST205' ||
     code === 'PGRST202' ||
+    code === 'PGRST106' ||
     code === '42P01' ||
+    code === '42883' ||
     message.includes('schema cache') ||
     message.includes('Could not find the table') ||
     message.includes('Could not find the function') ||
-    details.includes('schema cache')
+    message.includes('does not exist') ||
+    details.includes('schema cache') ||
+    hint.includes('schema cache')
   );
 }

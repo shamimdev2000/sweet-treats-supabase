@@ -112,7 +112,7 @@ export async function getActiveBranchId(email?: string): Promise<string | null> 
     }
 
     // 4. Fallback: provision or resolve default branch via hardened SECURITY DEFINER function
-    const { data: defaultBranchId } = await supabase.rpc('ensure_default_branch');
+    const { data: defaultBranchId } = await supabase.rpc('ensure_default_branch', email ? { p_user_email: email } : {});
     if (defaultBranchId) return defaultBranchId;
 
     return null;
