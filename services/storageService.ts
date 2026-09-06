@@ -1623,5 +1623,287 @@ export const storageService = {
       console.error("Import error in storageService:", e);
       return false;
     }
+  },
+
+  async syncAllLocalDataToSupabase(email: string): Promise<{ success: boolean; count: number; error?: string }> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isSupabaseConfigured || !supabase) {
+      return { success: false, count: 0, error: "Supabase connection is not configured." };
+    }
+
+    try {
+      const userId = await requireAuthUserId();
+      if (!userId) {
+        return { success: false, count: 0, error: "No active authenticated Supabase user found. Please login to Supabase." };
+      }
+
+      const branchId = await getActiveBranchId(cleanEmail);
+      let totalCount = 0;
+
+      // 1. Sync Profile
+      const localProfile = this.getProfileByEmail(cleanEmail);
+      if (localProfile) {
+        const profilePayload: any = {
+          id: userId,
+          email: cleanEmail,
+          business_name: localProfile.businessName || 'My Bakery',
+          owner_name: localProfile.ownerName || null,
+          phone: localProfile.phone || null,
+          address: localProfile.address || null,
+          manager_pin: localProfile.managerPin || '1234',
+          currency_symbol: localProfile.currencySymbol || '৳',
+          receipt_footer: localProfile.receiptFooter || 'Thank you for shopping with us!',
+          role: localProfile.role || 'owner',
+          updated_at: new Date().toISOString()
+        };
+        if (branchId) profilePayload.branch_id = branchId;
+        const { error: profErr } = await supabase.from('profiles').upsert(profilePayload);
+        if (profErr) {
+          if (isPgrstMissingTableError(profErr)) {
+            return { success: false, count: 0, error: "Supabase tables are missing. Please execute setup_schema.sql in your Supabase SQL Editor first." };
+          }
+          console.warn("Sync profile error:", profErr.message);
+        } else {
+          totalCount++;
+        }
+      }
+
+      // 2. Sync Products
+      const products = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
+      for (const p of products) {
+        const payload: any = {
+          id: p.id,
+          user_id: userId,
+          name: p.name,
+          category: p.category,
+          price: p.price,
+          stock: p.stock,
+          unit: p.unit,
+          barcode: p.barcode || null,
+          updated_at: new Date().toISOString()
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('products').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 3. Sync Sales & Items
+      const sales = getFromLocal<Sale>(STORAGE_KEYS.SALES, cleanEmail);
+      for (const s of sales) {
+        const salePayload: any = {
+          id: s.id,
+          user_id: userId,
+          total_price: s.totalPrice,
+          discount: s.discount || 0,
+          amount_paid: s.amountPaid,
+          due_amount: s.dueAmount,
+          customer_name: s.customerName || null,
+          customer_phone: s.customerPhone || null,
+          payment_method: s.paymentMethod,
+          mobile_provider: s.mobileProvider || null,
+          transaction_id: s.transactionId || null,
+          date: s.date
+        };
+        if (branchId) salePayload.branch_id = branchId;
+        const { error: sErr } = await supabase.from('sales').upsert(salePayload);
+        if (!sErr) {
+          totalCount++;
+          if (s.items && s.items.length > 0) {
+            const itemsPayload = s.items.map(item => ({
+              sale_id: s.id,
+              product_id: item.productId,
+              product_name: item.productName,
+              quantity: item.quantity,
+              unit: item.unit,
+              price_per_unit: item.pricePerUnit,
+              sub_total: item.subTotal
+            }));
+            await supabase.from('sale_items').upsert(itemsPayload);
+          }
+          if (s.payments && s.payments.length > 0) {
+            const paymentsPayload = s.payments.map(pay => ({
+              id: pay.id,
+              sale_id: s.id,
+              amount: pay.amount,
+              date: pay.date,
+              method: pay.method
+            }));
+            await supabase.from('sale_payments').upsert(paymentsPayload);
+          }
+        }
+      }
+
+      // 4. Sync Expenses
+      const expenses = getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, cleanEmail);
+      for (const exp of expenses) {
+        const payload: any = {
+          id: exp.id,
+          user_id: userId,
+          description: exp.description,
+          amount: exp.amount,
+          category: exp.category,
+          date: exp.date
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('expenses').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 5. Sync Wastage
+      const wastageList = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, cleanEmail);
+      for (const w of wastageList) {
+        const payload: any = {
+          id: w.id,
+          user_id: userId,
+          product_id: w.productId || null,
+          product_name: w.productName,
+          quantity: w.quantity,
+          unit: w.unit,
+          loss_value: w.lossValue,
+          reason: w.reason || null,
+          date: w.date
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('wastage').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 6. Sync Staff
+      const staffList = getFromLocal<Staff>(STORAGE_KEYS.STAFF, cleanEmail);
+      for (const st of staffList) {
+        const payload: any = {
+          id: st.id,
+          user_id: userId,
+          name: st.name,
+          designation: st.designation,
+          monthly_salary: st.monthlySalary,
+          join_date: st.joinDate
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('staff').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 7. Sync Attendance
+      const attList = getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, cleanEmail);
+      for (const att of attList) {
+        const payload: any = {
+          id: att.id,
+          user_id: userId,
+          staff_id: att.staffId,
+          date: att.date,
+          status: att.status
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('attendance').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 8. Sync Deductions
+      const dedList = getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, cleanEmail);
+      for (const d of dedList) {
+        const payload: any = {
+          id: d.id,
+          user_id: userId,
+          staff_id: d.staffId,
+          amount: d.amount,
+          reason: d.reason,
+          date: d.date
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('deductions').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 9. Sync Daily Closings
+      const closings = getFromLocal<DailyClosing>(STORAGE_KEYS.CLOSINGS, cleanEmail);
+      for (const c of closings) {
+        const payload: any = {
+          id: c.id,
+          user_id: userId,
+          date: c.date,
+          total_sales: c.totalSales,
+          total_cash_collected: c.totalCashCollected,
+          total_cash_payments: c.totalCashPayments || 0,
+          total_mobile_payments: c.totalMobilePayments || 0,
+          total_expenses: c.totalExpenses,
+          total_wastage: c.totalWastage,
+          system_balance: c.systemBalance,
+          actual_cash: c.actualCash,
+          difference: c.difference,
+          closed_by: c.closedBy,
+          timestamp: c.timestamp
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('daily_closings').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 10. Sync Monthly Closings
+      const monthlyClosings = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, cleanEmail);
+      for (const mc of monthlyClosings) {
+        const payload: any = {
+          id: mc.id,
+          user_id: userId,
+          month: mc.month,
+          total_sales: mc.totalSales,
+          total_cash_payments: mc.totalCashPayments || 0,
+          total_mobile_payments: mc.totalMobilePayments || 0,
+          total_expenses: mc.totalExpenses,
+          total_wastage: mc.totalWastage,
+          total_profit: mc.totalProfit,
+          total_dues: mc.totalDues || 0,
+          closed_by: mc.closedBy,
+          timestamp: mc.timestamp
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('monthly_closings').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 11. Sync Production
+      const prodList = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, cleanEmail);
+      for (const pr of prodList) {
+        const payload: any = {
+          id: pr.id,
+          user_id: userId,
+          product_id: pr.productId || null,
+          product_name: pr.productName,
+          quantity: pr.quantity,
+          unit: pr.unit,
+          unit_price: pr.unitPrice,
+          total_value: pr.totalValue,
+          date: pr.date
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('production').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      // 12. Sync Notes
+      const notesList = getFromLocal<DailyNote>(STORAGE_KEYS.NOTES, cleanEmail);
+      for (const n of notesList) {
+        const payload: any = {
+          id: n.id,
+          user_id: userId,
+          title: n.title,
+          content: n.content,
+          priority: n.priority,
+          status: n.status,
+          assigned_to: n.assignedTo || null,
+          author: n.author,
+          pinned: n.pinned || false,
+          created_at: n.createdAt
+        };
+        if (branchId) payload.branch_id = branchId;
+        const { error } = await supabase.from('daily_notes').upsert(payload);
+        if (!error) totalCount++;
+      }
+
+      return { success: true, count: totalCount };
+    } catch (err: any) {
+      console.error("syncAllLocalDataToSupabase error:", err);
+      return { success: false, count: 0, error: err.message || "Failed to sync local data to Supabase." };
+    }
   }
 };

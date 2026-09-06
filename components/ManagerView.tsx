@@ -20,9 +20,16 @@ import {
   Building2,
   DollarSign,
   Shield,
-  Clock
+  Clock,
+  Cloud,
+  Database,
+  UploadCloud,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { storageService } from '../services/storageService';
+import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 
 interface Props {
   username: string;
@@ -53,10 +60,38 @@ const ManagerView: React.FC<Props> = ({
   currentPassword, 
   stats 
 }) => {
-  // PIN change state
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  const handleSyncToSupabase = async () => {
+    setIsSyncingCloud(true);
+    const toastId = toast.loading("Connecting and syncing local data to Supabase...");
+    try {
+      const result = await storageService.syncAllLocalDataToSupabase(username);
+      if (result.success) {
+        toast.success(`Successfully synchronized ${result.count} records to Supabase!`, { id: toastId });
+      } else {
+        toast.error(result.error || "Failed to sync to Supabase.", { id: toastId, duration: 6000 });
+      }
+    } catch (e: any) {
+      toast.error(`Sync error: ${e.message}`, { id: toastId });
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleCopySchemaSql = async () => {
+    try {
+      // Fetch or copy schema instructions
+      const instructions = `-- Open Supabase Dashboard -> SQL Editor -> Run setup_schema.sql located in project /supabase/setup_schema.sql`;
+      await navigator.clipboard.writeText(instructions);
+      toast.success("Copied schema note! Open Supabase SQL Editor and run setup_schema.sql to enable instant cloud sync.");
+    } catch {
+      toast.info("Please run the script in /supabase/setup_schema.sql in your Supabase SQL Editor.");
+    }
+  };
 
   // Business Profile Form state
   const [businessName, setBusinessName] = useState(profile?.businessName || 'My Bakery');
@@ -351,6 +386,59 @@ const ManagerView: React.FC<Props> = ({
               >
                 <LogOut size={15} />
                 Logout Account
+              </button>
+            </div>
+          </div>
+
+          {/* Supabase Cloud Sync Card */}
+          <div className="bg-white dark:bg-[#070e1b] p-6 rounded-3xl border border-slate-200 dark:border-[#162744] shadow-sm">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Cloud size={17} className="text-[#00e5ff]" />
+                Supabase Cloud Database
+              </span>
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${isSupabaseConfigured ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                {isSupabaseConfigured ? 'Connected' : 'Offline Mode'}
+              </span>
+            </h3>
+
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Target Project: <span className="font-mono text-[11px] text-[#00e5ff]">pqeqlayphewbrktaxsqc</span>
+            </p>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={handleSyncToSupabase}
+                disabled={isSyncingCloud}
+                className="w-full p-3 bg-gradient-to-r from-[#00b4d8]/20 to-[#0077b6]/20 hover:from-[#00b4d8]/30 hover:to-[#0077b6]/30 border border-[#00d2ff]/40 rounded-xl text-left flex items-center justify-between cursor-pointer transition-all disabled:opacity-60"
+              >
+                <div className="flex items-center gap-2.5">
+                  <UploadCloud size={17} className="text-[#00e5ff]" />
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">
+                      {isSyncingCloud ? 'Syncing to Supabase...' : 'Sync Local Data to Supabase'}
+                    </div>
+                    <div className="text-[9px] text-slate-400">Push all products, sales & records to cloud</div>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-[#00e5ff] uppercase px-2 py-0.5 bg-[#050b14] rounded-md border border-[#00d2ff]/20">
+                  {isSyncingCloud ? 'Syncing...' : 'Sync Now'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopySchemaSql}
+                className="w-full p-2.5 bg-slate-50 dark:bg-[#0a1527] hover:border-[#00e5ff]/50 border border-slate-200 dark:border-[#162744] rounded-xl text-left flex items-center justify-between cursor-pointer transition-all text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Database size={15} className="text-slate-400" />
+                  <span className="text-slate-600 dark:text-slate-300 font-semibold text-xs">Schema File: <code className="font-mono text-[10px] text-[#00e5ff]">setup_schema.sql</code></span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 hover:text-white">
+                  <Copy size={12} /> Instructions
+                </span>
               </button>
             </div>
           </div>
