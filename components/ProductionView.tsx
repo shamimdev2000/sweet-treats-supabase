@@ -89,11 +89,11 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
             <Target size={80} />
           </div>
           <div className="relative z-10">
-            <div className="w-12 h-12 bg-[#0a1527] border border-[#00d2ff]/30 rounded-2xl flex items-center justify-center mb-5 text-[#00e5ff] shadow-[0_0_15px_rgba(0,210,255,0.2)]">
+            <div className="w-12 h-12 bg-cyan-50 dark:bg-[#0a1527] border border-cyan-500/30 dark:border-[#00d2ff]/30 rounded-2xl flex items-center justify-center mb-5 text-cyan-600 dark:text-[#00e5ff] shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.2)]">
               <TrendingUp size={24} />
             </div>
-            <p className="text-[#00e5ff] font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Today's Production</p>
-            <h3 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight drop-shadow-[0_0_10px_rgba(0,229,255,0.2)]">
+            <p className="text-cyan-700 dark:text-[#00e5ff] font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Today's Production</p>
+            <h3 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight drop-shadow-sm dark:drop-shadow-[0_0_10px_rgba(0,229,255,0.2)]">
               ৳{stats.todayTotal.toLocaleString()}
             </h3>
           </div>
@@ -109,10 +109,10 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
             <Calendar size={80} />
           </div>
           <div className="relative z-10">
-            <div className="w-12 h-12 bg-[#0a1527] border border-[#00d2ff]/30 rounded-2xl flex items-center justify-center mb-5 text-[#00e5ff] shadow-[0_0_15px_rgba(0,210,255,0.2)]">
+            <div className="w-12 h-12 bg-cyan-50 dark:bg-[#0a1527] border border-cyan-500/30 dark:border-[#00d2ff]/30 rounded-2xl flex items-center justify-center mb-5 text-cyan-600 dark:text-[#00e5ff] shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.2)]">
               <ArrowUpRight size={24} />
             </div>
-            <p className="text-[#00e5ff] font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Monthly Production</p>
+            <p className="text-cyan-700 dark:text-[#00e5ff] font-bold uppercase tracking-[0.2em] text-[10px] mb-1">Monthly Production</p>
             <h3 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
               ৳{stats.monthTotal.toLocaleString()}
             </h3>
@@ -121,15 +121,15 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
       </div>
 
       <div className="flex bg-slate-100 dark:bg-[#050b14] p-1.5 rounded-2xl border border-slate-200 dark:border-[#162744] w-fit">
-        <button onClick={() => setActiveTab('reconciliation')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'reconciliation' ? 'smart-cyan-pill' : 'text-slate-400 hover:text-white'}`}><BarChart3 size={16} /> Match Report</button>
-        <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'history' ? 'smart-cyan-pill' : 'text-slate-400 hover:text-white'}`}><History size={16} /> Full History</button>
+        <button onClick={() => setActiveTab('reconciliation')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'reconciliation' ? 'smart-cyan-pill' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}><BarChart3 size={16} /> Match Report</button>
+        <button onClick={() => setActiveTab('history')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'history' ? 'smart-cyan-pill' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}><History size={16} /> Full History</button>
       </div>
 
       {activeTab === 'reconciliation' ? (
         <div className="bg-white dark:bg-[#070e1b] rounded-3xl border border-slate-200 dark:border-[#162744] shadow-sm overflow-hidden">
           <div className="p-7 border-b border-slate-100 dark:border-[#162744] flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#0a1527] border border-[#00d2ff]/30 rounded-2xl text-[#00e5ff]"><Scan size={22} /></div>
+              <div className="p-3 bg-cyan-50 dark:bg-[#0a1527] border border-cyan-500/30 dark:border-[#00d2ff]/30 rounded-2xl text-cyan-600 dark:text-[#00e5ff]"><Scan size={22} /></div>
               <div>
                 <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Live Reconciliation</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Today's Sales vs Production vs Stock</p>
@@ -169,7 +169,7 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
         <div className="bg-white dark:bg-[#070e1b] rounded-3xl border border-slate-200 dark:border-[#162744] shadow-sm overflow-hidden">
           <div className="p-7 border-b border-slate-100 dark:border-[#162744] flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#0a1527] border border-[#00d2ff]/30 rounded-2xl text-[#00e5ff]">
+              <div className="p-3 bg-cyan-50 dark:bg-[#0a1527] border border-cyan-500/30 dark:border-[#00d2ff]/30 rounded-2xl text-cyan-600 dark:text-[#00e5ff]">
                 <History size={22} />
               </div>
               <div>
@@ -178,7 +178,7 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
               </div>
             </div>
             <div className="px-4 py-2 bg-slate-50 dark:bg-[#0a1527] rounded-xl border border-slate-200 dark:border-[#162744]">
-              <span className="text-xs font-black text-slate-500 dark:text-[#00e5ff] uppercase tracking-widest">Total Records: {production.length}</span>
+              <span className="text-xs font-black text-slate-700 dark:text-[#00e5ff] uppercase tracking-widest">Total Records: {production.length}</span>
             </div>
           </div>
 
@@ -229,7 +229,7 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
                       <span className="text-sm font-bold text-slate-600 dark:text-slate-400">৳{p.unitPrice}</span>
                     </td>
                     <td className="px-8 py-4.5">
-                      <span className="text-sm font-black text-[#00e5ff]">৳{p.totalValue.toLocaleString()}</span>
+                      <span className="text-sm font-black text-cyan-700 dark:text-[#00e5ff]">৳{p.totalValue.toLocaleString()}</span>
                     </td>
                     <td className="px-8 py-4.5 text-right">
                       <button 
@@ -254,23 +254,23 @@ const ProductionView: React.FC<Props> = ({ production, products, sales, wastage,
                  <div key={p.id} className="p-6 space-y-4">
                     <div className="flex justify-between items-start">
                        <div>
-                          <div className="text-[10px] font-black text-[#00e5ff] uppercase tracking-widest">
+                          <div className="text-[10px] font-black text-cyan-700 dark:text-[#00e5ff] uppercase tracking-widest">
                             {new Date(p.date).toLocaleDateString()} {new Date(p.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                           <div className="text-base font-black text-slate-900 dark:text-white">{p.productName}</div>
                        </div>
-                       <button onClick={() => onDelete(p.id)} className="p-2 text-rose-400 bg-rose-500/10 rounded-lg cursor-pointer">
+                       <button onClick={() => onDelete(p.id)} className="p-2 text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 rounded-lg cursor-pointer">
                           <Trash2 size={16} />
                        </button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                       <div className="p-3 bg-slate-50 dark:bg-[#0a1527] rounded-xl border border-slate-100 dark:border-[#162744]">
-                          <div className="text-[8px] text-slate-400 font-black uppercase mb-1">Production</div>
+                       <div className="p-3 bg-slate-50 dark:bg-[#0a1527] rounded-xl border border-slate-200 dark:border-[#162744]">
+                          <div className="text-[8px] text-slate-500 dark:text-slate-400 font-black uppercase mb-1">Production</div>
                           <div className="text-sm font-black text-slate-900 dark:text-white">{p.quantity} {p.unit}</div>
                        </div>
-                       <div className="p-3 bg-[#0a1527] rounded-xl border border-[#00d2ff]/20">
-                          <div className="text-[8px] text-[#00e5ff] font-black uppercase mb-1">Total Value</div>
-                          <div className="text-sm font-black text-[#00e5ff]">৳{p.totalValue.toLocaleString()}</div>
+                       <div className="p-3 bg-cyan-50/70 dark:bg-[#0a1527] rounded-xl border border-cyan-500/20 dark:border-[#00d2ff]/20">
+                          <div className="text-[8px] text-cyan-700 dark:text-[#00e5ff] font-black uppercase mb-1">Total Value</div>
+                          <div className="text-sm font-black text-cyan-700 dark:text-[#00e5ff]">৳{p.totalValue.toLocaleString()}</div>
                        </div>
                     </div>
                  </div>

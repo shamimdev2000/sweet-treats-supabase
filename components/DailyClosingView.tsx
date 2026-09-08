@@ -324,11 +324,11 @@ const DailyClosingView: React.FC<Props> = ({
               <SummaryItem title="Dues" value={activeStats.dues} color="text-orange-400" />
               <SummaryItem title="System Balance" value={activeStats.balance} color="text-emerald-400" highlight />
             </div>
-            <div className="lg:col-span-4 bg-[#0a1527] p-6 rounded-2xl border border-[#00d2ff]/30 shadow-[0_0_20px_rgba(0,210,255,0.15)] flex flex-col justify-center">
-              <label className="text-[10px] font-black text-[#00e5ff] uppercase tracking-widest mb-2 block">Actual Cash in Hand</label>
+            <div className="lg:col-span-4 bg-cyan-50/60 dark:bg-[#0a1527] p-6 rounded-2xl border border-cyan-500/30 dark:border-[#00d2ff]/30 shadow-sm dark:shadow-[0_0_20px_rgba(0,210,255,0.15)] flex flex-col justify-center">
+              <label className="text-[10px] font-black text-cyan-600 dark:text-[#00e5ff] uppercase tracking-widest mb-2 block">Actual Cash in Hand</label>
               <input 
                 type="number" 
-                className="w-full bg-white dark:bg-[#050b14] border border-[#162744] rounded-xl p-3.5 text-2xl font-black text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] focus:shadow-[0_0_15px_rgba(0,210,255,0.3)] transition-all text-center" 
+                className="w-full bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-xl p-3.5 text-2xl font-black text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] focus:shadow-[0_0_15px_rgba(0,210,255,0.3)] transition-all text-center" 
                 placeholder="0.00" 
                 value={actualCashInput} 
                 onChange={e => setActualCashInput(e.target.value === '' ? '' : Number(e.target.value))} 
@@ -776,8 +776,8 @@ const DailyClosingView: React.FC<Props> = ({
 };
 
 const SummaryItem = ({ title, value, color, highlight }: any) => (
-  <div className={`p-4 rounded-2xl border flex flex-col justify-between h-full ${highlight ? 'bg-[#0a1527] border-emerald-500/30' : 'bg-slate-50 dark:bg-[#0a1527] border-slate-200 dark:border-[#162744]'}`}>
-    <div><h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</h4></div>
+  <div className={`p-4 rounded-2xl border flex flex-col justify-between h-full ${highlight ? 'bg-emerald-50/80 dark:bg-[#0a1527] border-emerald-500/40' : 'bg-slate-50 dark:bg-[#0a1527] border-slate-200 dark:border-[#162744]'}`}>
+    <div><h4 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">{title}</h4></div>
     <div className={`text-lg font-black ${color}`}>৳{(value || 0).toLocaleString()}</div>
   </div>
 );

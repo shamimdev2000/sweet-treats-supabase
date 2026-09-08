@@ -73,7 +73,7 @@ const ExpensesView: React.FC<Props> = ({ expenses, onAdd, closings = [] }) => {
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-white dark:bg-[#070e1b] p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-[#162744]">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-[#0a1527] border border-[#00d2ff]/30 rounded-xl flex items-center justify-center text-[#00e5ff] shadow-[0_0_15px_rgba(0,210,255,0.2)]">
+              <div className="w-10 h-10 bg-cyan-50 dark:bg-[#0a1527] border border-cyan-500/30 dark:border-[#00d2ff]/30 rounded-xl flex items-center justify-center text-cyan-600 dark:text-[#00e5ff] shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.2)]">
                 <Receipt size={20} />
               </div>
               <div>
@@ -83,16 +83,16 @@ const ExpensesView: React.FC<Props> = ({ expenses, onAdd, closings = [] }) => {
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase block px-1">Description</label>
-                <input required type="text" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Expense description..." />
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase block px-1">Description</label>
+                <input required type="text" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Expense description..." />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase block px-1">Amount (৳)</label>
-                <input required type="number" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm font-bold" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value === '' ? '' : Number(e.target.value)})} placeholder="0.00" />
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase block px-1">Amount (৳)</label>
+                <input required type="number" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm font-bold" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value === '' ? '' : Number(e.target.value)})} placeholder="0.00" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase block px-1">Category</label>
-                <select className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})}>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase block px-1">Category</label>
+                <select className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value as any})}>
                   <option value="Raw Material">Raw Material</option>
                   <option value="Utilities">Utilities</option>
                   <option value="Rent">Rent</option>
@@ -102,8 +102,8 @@ const ExpensesView: React.FC<Props> = ({ expenses, onAdd, closings = [] }) => {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase block px-1">Date</label>
-                <input required type="date" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase block px-1">Date</label>
+                <input required type="date" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
               </div>
               <button type="submit" className="w-full smart-cyan-pill py-3.5 text-xs font-black uppercase tracking-wider mt-4 cursor-pointer">
                 Record Expense
@@ -130,7 +130,7 @@ const ExpensesView: React.FC<Props> = ({ expenses, onAdd, closings = [] }) => {
           <div className="bg-white dark:bg-[#070e1b] rounded-3xl shadow-sm border border-slate-200 dark:border-[#162744] overflow-hidden">
             <div className="px-8 py-6 border-b border-slate-100 dark:border-[#162744] flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">Expense History (Active Session)</h3>
-              <span className="text-[10px] text-[#00e5ff] font-bold uppercase tracking-widest px-3 py-1 bg-[#0a1527] rounded-full border border-[#00d2ff]/30">Since last closing</span>
+              <span className="text-[10px] text-cyan-700 dark:text-[#00e5ff] font-bold uppercase tracking-widest px-3 py-1 bg-cyan-50 dark:bg-[#0a1527] rounded-full border border-cyan-500/30 dark:border-[#00d2ff]/30">Since last closing</span>
             </div>
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left">

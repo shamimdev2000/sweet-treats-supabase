@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Sale, SaleItem, View, UserProfile } from '../types';
 import { generateId } from '../services/idGenerator';
+import { NetworkStatusBadge } from './OfflineIndicator';
+import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ShoppingCart, 
   Trash2, 
@@ -401,12 +403,12 @@ const SalesView: React.FC<Props> = ({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Top Header Row matching screenshot */}
-      <div className="bg-[#050b14] border border-[#162744] rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.5)] shrink-0 mb-2.5 sm:mb-3">
+      <div className="bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3 shadow-sm dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] shrink-0 mb-2.5 sm:mb-3">
         {/* Left Side: Menu + Title + Live Clock */}
         <div className="flex items-center gap-3 sm:gap-4">
           <button 
             onClick={() => onOpenMobileMenu && onOpenMobileMenu()}
-            className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-[#071324] hover:bg-[#0c1e38] border border-[#00d2ff]/40 rounded-full text-xs font-black text-white flex items-center gap-2 transition-all cursor-pointer shadow-[0_0_12px_rgba(0,210,255,0.2)]"
+            className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] border border-cyan-400/40 dark:border-[#00d2ff]/40 rounded-full text-xs font-black text-slate-800 dark:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm dark:shadow-[0_0_12px_rgba(0,210,255,0.2)]"
             title="Open Menu"
           >
             <Menu size={15} className="text-[#00e5ff]" />
@@ -417,25 +419,28 @@ const SalesView: React.FC<Props> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-[#00e5ff] shadow-[0_0_10px_#00e5ff] animate-pulse"></span>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm sm:text-base font-black tracking-wider text-white truncate max-w-[200px]">
+                <span className="text-sm sm:text-base font-black tracking-wider text-slate-900 dark:text-white truncate max-w-[200px]">
                   {businessProfile?.businessName?.toUpperCase() || 'BAKERY STORE'}
                 </span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[#00e5ff]/15 text-[#00e5ff] border border-[#00e5ff]/40 uppercase tracking-widest">
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-cyan-500/10 dark:bg-[#00e5ff]/15 text-cyan-600 dark:text-[#00e5ff] border border-cyan-400/40 dark:border-[#00e5ff]/40 uppercase tracking-widest">
                   POS
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-[#5c7e9f] tracking-wide">
+              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-[#5c7e9f] tracking-wide">
                 {currentTime || '00:00 AM'}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right Side Buttons: Sales History, Dues, Notes, Theme */}
-        <div className="flex items-center gap-2">
+        {/* Right Side Buttons: Status, Install, Sales History, Dues, Notes, Theme */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <NetworkStatusBadge compact />
+          <PWAInstallButton variant="header" />
+
           <button 
             onClick={() => setIsHistoryModalOpen(true)}
-            className="smart-cyan-pill px-3.5 py-2 sm:px-4 sm:py-2 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.4)]"
+            className="smart-cyan-pill px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.4)]"
             id="btn_pos_sales_history"
           >
             <History size={14} />
@@ -450,7 +455,7 @@ const SalesView: React.FC<Props> = ({
             <>
               <button 
                 onClick={() => onNavigateToView(View.DUES)}
-                className="px-3 py-2 bg-[#071324] hover:bg-[#0c1e38] border border-[#162744] hover:border-[#00d2ff]/40 rounded-full text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] border border-slate-200 dark:border-[#162744] hover:border-cyan-400/40 dark:hover:border-[#00d2ff]/40 rounded-full text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Go to Dues"
               >
                 <Wallet size={14} className="text-[#00e5ff]" />
@@ -459,7 +464,7 @@ const SalesView: React.FC<Props> = ({
 
               <button 
                 onClick={() => onNavigateToView(View.NOTES)}
-                className="px-3 py-2 bg-[#071324] hover:bg-[#0c1e38] border border-[#162744] hover:border-[#00d2ff]/40 rounded-full text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] border border-slate-200 dark:border-[#162744] hover:border-cyan-400/40 dark:hover:border-[#00d2ff]/40 rounded-full text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition-all cursor-pointer"
                 title="Go to Daily Notes"
               >
                 <StickyNote size={14} className="text-[#00e5ff]" />
@@ -471,7 +476,7 @@ const SalesView: React.FC<Props> = ({
           {onToggleTheme && (
             <button 
               onClick={onToggleTheme}
-              className="p-2 bg-[#071324] hover:bg-[#0c1e38] border border-[#162744] hover:border-[#00d2ff]/40 rounded-full text-[#00e5ff] transition-all cursor-pointer"
+              className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] border border-slate-200 dark:border-[#162744] hover:border-cyan-400/40 dark:hover:border-[#00d2ff]/40 rounded-full text-cyan-600 dark:text-[#00e5ff] transition-all cursor-pointer"
               title="Toggle Theme"
             >
               {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
@@ -481,13 +486,13 @@ const SalesView: React.FC<Props> = ({
       </div>
 
       {/* Mobile Tab Switcher (Visible only on screens < lg) */}
-      <div className="lg:hidden flex items-center bg-[#050b14] p-1 rounded-2xl border border-[#162744] shrink-0 gap-1">
+      <div className="lg:hidden flex items-center bg-slate-100 dark:bg-[#050b14] p-1 rounded-2xl border border-slate-200 dark:border-[#162744] shrink-0 gap-1">
         <button
           onClick={() => setMobilePosTab('catalog')}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
             mobilePosTab === 'catalog'
               ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]'
-              : 'text-slate-400 hover:text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <Boxes size={14} />
@@ -498,12 +503,12 @@ const SalesView: React.FC<Props> = ({
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
             mobilePosTab === 'cart'
               ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]'
-              : 'text-slate-400 hover:text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <ShoppingCart size={14} />
           <span>কার্ট ({totalCartCount})</span>
-          {totalBill > 0 && <span className="ml-1 text-[11px] font-black text-amber-300">৳{totalBill.toLocaleString()}</span>}
+          {totalBill > 0 && <span className="ml-1 text-[11px] font-black text-amber-500 dark:text-amber-300">৳{totalBill.toLocaleString()}</span>}
         </button>
       </div>
 
@@ -523,12 +528,12 @@ const SalesView: React.FC<Props> = ({
                 placeholder="Search product by name, category, or barcode..."
                 value={productSearchTerm}
                 onChange={(e) => setProductSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-[#050b14] border border-[#162744] rounded-2xl text-xs sm:text-sm font-semibold text-white placeholder-[#4d6b8f] outline-none focus:border-[#00e5ff] focus:shadow-[0_0_15px_rgba(0,229,255,0.25)] transition-all"
+                className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#4d6b8f] outline-none focus:border-[#00e5ff] focus:shadow-[0_0_15px_rgba(0,229,255,0.25)] transition-all shadow-sm"
               />
               {productSearchTerm && (
                 <button 
                   onClick={() => setProductSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
                 >
                   <X size={15} />
                 </button>
@@ -543,7 +548,7 @@ const SalesView: React.FC<Props> = ({
                   const p = products.find(prod => prod.id === e.target.value);
                   if (p) handleSelectProduct(p);
                 }}
-                className="w-full py-2.5 sm:py-3 px-3.5 bg-[#050b14] border border-[#162744] rounded-2xl text-xs font-bold text-white outline-none focus:border-[#00e5ff] cursor-pointer appearance-none pr-8 shadow-sm"
+                className="w-full py-2.5 sm:py-3 px-3.5 bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-2xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] cursor-pointer appearance-none pr-8 shadow-sm"
                 style={{ 
                   backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2300e5ff'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, 
                   backgroundRepeat: 'no-repeat', 
@@ -551,13 +556,13 @@ const SalesView: React.FC<Props> = ({
                   backgroundSize: '1.1em 1.1em' 
                 }}
               >
-                <option value="" className="bg-[#050b14] text-slate-300">Select Direct...</option>
+                <option value="" className="bg-white dark:bg-[#050b14] text-slate-600 dark:text-slate-300">Select Direct...</option>
                 {products.slice().sort((a,b) => a.name.localeCompare(b.name)).map(p => {
                   const isZero = p.stock <= 0;
                   const isLow = isProductLowStock(p);
                   const stockLabel = isZero ? '⚠️ CRITICAL (0 Stock)' : isLow ? `⚠️ Low (${p.stock} ${p.unit})` : `${p.stock} ${p.unit}`;
                   return (
-                    <option key={p.id} value={p.id} className="bg-[#0a1220] text-white">
+                    <option key={p.id} value={p.id} className="bg-white dark:bg-[#0a1220] text-slate-900 dark:text-white">
                       {p.name} - ৳{p.price} ({stockLabel})
                     </option>
                   );
@@ -573,7 +578,7 @@ const SalesView: React.FC<Props> = ({
               className={`px-4 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
                 activeCategory === 'ALL'
                   ? 'smart-cyan-pill'
-                  : 'bg-[#071324] hover:bg-[#0c1e38] text-slate-400 hover:text-white border border-[#162744]'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#162744]'
               }`}
             >
               ALL {categoryCounts['ALL'] || 0}
@@ -586,7 +591,7 @@ const SalesView: React.FC<Props> = ({
                 className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all shrink-0 cursor-pointer ${
                   activeCategory === cat
                     ? 'smart-cyan-pill'
-                    : 'bg-[#071324] hover:bg-[#0c1e38] text-slate-400 hover:text-white border border-[#162744]'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#162744]'
                 }`}
               >
                 {cat} ({categoryCounts[cat] || 0})
@@ -595,17 +600,17 @@ const SalesView: React.FC<Props> = ({
           </div>
 
           {/* Product Catalog Grid Container (Scrolls internally) */}
-          <div className="bg-[#050b14] border border-[#162744] rounded-3xl p-3.5 sm:p-4 flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-3xl p-3.5 sm:p-4 flex-1 min-h-0 flex flex-col overflow-hidden shadow-sm dark:shadow-none">
             {filteredProducts.length === 0 ? (
               /* Empty State matching screenshot */
               <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
-                <div className="w-14 h-14 bg-[#071324] border border-[#162744] rounded-2xl flex items-center justify-center text-[#00d2ff] mb-3 shadow-[0_0_20px_rgba(0,210,255,0.15)]">
+                <div className="w-14 h-14 bg-slate-100 dark:bg-[#071324] border border-slate-200 dark:border-[#162744] rounded-2xl flex items-center justify-center text-[#00d2ff] mb-3 shadow-[0_0_20px_rgba(0,210,255,0.15)]">
                   <Boxes size={28} className="text-[#00e5ff]" />
                 </div>
-                <h3 className="text-xs sm:text-sm font-bold text-slate-300 uppercase tracking-wider">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   NO PRODUCTS FOUND
                 </h3>
-                <p className="text-[11px] text-[#527196] font-semibold mt-1">
+                <p className="text-[11px] text-slate-500 dark:text-[#527196] font-semibold mt-1">
                   Please try changing your search or category filter.
                 </p>
                 {productSearchTerm && (
@@ -629,27 +634,27 @@ const SalesView: React.FC<Props> = ({
                     <div 
                       key={p.id}
                       onClick={() => !isOutOfStock && handleSelectProduct(p)}
-                      className={`relative bg-[#081222] border rounded-xl p-1.5 sm:p-2 flex flex-col justify-between transition-all duration-150 group select-none ${
+                      className={`relative bg-slate-50 dark:bg-[#081222] border rounded-xl p-1.5 sm:p-2 flex flex-col justify-between transition-all duration-150 group select-none ${
                         isOutOfStock 
-                          ? 'opacity-60 border-red-500/30 bg-red-950/10 cursor-not-allowed'
+                          ? 'opacity-60 border-red-500/30 bg-red-50 dark:bg-red-950/10 cursor-not-allowed'
                           : cartItem 
-                          ? 'border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.25)] bg-[#0b1b31] cursor-pointer'
+                          ? 'border-[#00e5ff] shadow-[0_0_12px_rgba(0,229,255,0.25)] bg-cyan-50/60 dark:bg-[#0b1b31] cursor-pointer'
                           : isLowStock
-                          ? 'border-amber-500/30 hover:border-amber-400/60 hover:bg-[#0e182b] cursor-pointer'
-                          : 'border-[#162744] hover:border-[#00e5ff]/50 hover:bg-[#0c1c33] cursor-pointer'
+                          ? 'border-amber-500/30 hover:border-amber-400/60 hover:bg-amber-50/40 dark:hover:bg-[#0e182b] cursor-pointer'
+                          : 'border-slate-200 dark:border-[#162744] hover:border-[#00e5ff]/50 hover:bg-slate-100 dark:hover:bg-[#0c1c33] cursor-pointer shadow-sm'
                       }`}
                     >
                       {/* Top Badges */}
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-[7.5px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#050b14] text-[#6b8daf] border border-[#162744] truncate max-w-[55px]">
+                        <span className="text-[7.5px] sm:text-[8px] font-bold px-1.5 py-0.5 rounded bg-white dark:bg-[#050b14] text-slate-600 dark:text-[#6b8daf] border border-slate-200 dark:border-[#162744] truncate max-w-[55px]">
                           {p.category}
                         </span>
                         <span className={`text-[7.5px] sm:text-[8px] font-black px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${
                           isOutOfStock 
-                            ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse'
+                            ? 'bg-red-500/20 text-red-500 dark:text-red-400 border-red-500/40 animate-pulse'
                             : isLowStock
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                            : 'bg-[#00e5ff]/10 text-[#00e5ff] border-[#00e5ff]/30'
+                            ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40'
+                            : 'bg-cyan-500/10 dark:bg-[#00e5ff]/10 text-cyan-600 dark:text-[#00e5ff] border-cyan-400/30 dark:border-[#00e5ff]/30'
                         }`}>
                           {isOutOfStock ? (
                             <>
@@ -666,15 +671,15 @@ const SalesView: React.FC<Props> = ({
                       </div>
 
                       {/* Product Name */}
-                      <h4 className="font-extrabold text-[11px] sm:text-xs text-white line-clamp-1 leading-tight my-0.5 group-hover:text-[#00e5ff] transition-colors" title={p.name}>
+                      <h4 className="font-extrabold text-[11px] sm:text-xs text-slate-900 dark:text-white line-clamp-1 leading-tight my-0.5 group-hover:text-[#00e5ff] transition-colors" title={p.name}>
                         {p.name}
                       </h4>
 
                       {/* Price & Cart Counter */}
-                      <div className="mt-0.5 pt-1 border-t border-[#162744] flex items-center justify-between">
-                        <div className="text-[11px] sm:text-xs font-black text-[#00e5ff]">
+                      <div className="mt-0.5 pt-1 border-t border-slate-200 dark:border-[#162744] flex items-center justify-between">
+                        <div className="text-[11px] sm:text-xs font-black text-cyan-700 dark:text-[#00e5ff]">
                           ৳{p.price}
-                          <span className="text-[8px] text-slate-400 font-normal ml-0.5">/{p.unit}</span>
+                          <span className="text-[8px] text-slate-500 dark:text-slate-400 font-normal ml-0.5">/{p.unit}</span>
                         </div>
 
                         {cartItem ? (
@@ -682,7 +687,7 @@ const SalesView: React.FC<Props> = ({
                             {cartItem.quantity}
                           </div>
                         ) : (
-                          <div className="w-4.5 h-4.5 rounded-full bg-[#071324] group-hover:bg-[#00e5ff] text-slate-400 group-hover:text-black font-bold flex items-center justify-center transition-all">
+                          <div className="w-4.5 h-4.5 rounded-full bg-slate-200 dark:bg-[#071324] group-hover:bg-[#00e5ff] text-slate-600 dark:text-slate-400 group-hover:text-black font-bold flex items-center justify-center transition-all">
                             <Plus size={10} />
                           </div>
                         )}
@@ -696,14 +701,14 @@ const SalesView: React.FC<Props> = ({
 
           {/* Floating Mobile Checkout Bar when items exist in Cart */}
           {totalCartCount > 0 && (
-            <div className="lg:hidden shrink-0 p-2.5 bg-[#071324] border border-[#00d2ff]/40 rounded-2xl flex items-center justify-between shadow-[0_0_20px_rgba(0,210,255,0.25)] animate-in slide-in-from-bottom-2">
+            <div className="lg:hidden shrink-0 p-2.5 bg-white dark:bg-[#071324] border border-cyan-400/40 dark:border-[#00d2ff]/40 rounded-2xl flex items-center justify-between shadow-lg dark:shadow-[0_0_20px_rgba(0,210,255,0.25)] animate-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2 pl-1">
                 <div className="w-8 h-8 rounded-xl bg-[#00e5ff] text-black flex items-center justify-center font-black text-xs shadow-[0_0_10px_#00e5ff]">
                   {totalCartCount}
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">মোট বিল</div>
-                  <div className="text-sm font-black text-[#00e5ff]">৳{totalBill.toLocaleString()}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">মোট বিল</div>
+                  <div className="text-sm font-black text-cyan-600 dark:text-[#00e5ff]">৳{totalBill.toLocaleString()}</div>
                 </div>
               </div>
               <button
@@ -718,24 +723,24 @@ const SalesView: React.FC<Props> = ({
         </div>
 
         {/* Right Section: Active Sale / Cart Panel (Matching screenshot exactly, perfectly fitted) */}
-        <div className={`lg:col-span-5 xl:col-span-4 bg-[#050b14] border border-[#162744] rounded-3xl p-3.5 sm:p-4 flex-col h-full overflow-hidden justify-between shadow-[0_10px_35px_rgba(0,0,0,0.6)] ${mobilePosTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
+        <div className={`lg:col-span-5 xl:col-span-4 bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-3xl p-3.5 sm:p-4 flex-col h-full overflow-hidden justify-between shadow-sm dark:shadow-[0_10px_35px_rgba(0,0,0,0.6)] ${mobilePosTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
           
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {/* Header: ACTIVE SALE + Badge */}
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#162744] shrink-0">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-[#162744] shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setMobilePosTab('catalog')}
-                  className="lg:hidden p-1.5 bg-[#071324] hover:bg-[#0c1e38] border border-[#162744] rounded-xl text-[#00e5ff] transition-all cursor-pointer mr-1"
+                  className="lg:hidden p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] border border-slate-200 dark:border-[#162744] rounded-xl text-cyan-600 dark:text-[#00e5ff] transition-all cursor-pointer mr-1"
                   title="Back to products"
                 >
                   <ArrowLeft size={16} />
                 </button>
                 <ShoppingCart size={18} className="text-[#00e5ff]" />
-                <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white">
+                <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-900 dark:text-white">
                   ACTIVE SALE
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-[#07192e] border border-[#00d2ff]/40 text-[#00e5ff] text-[10px] font-black">
+                <span className="px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-[#07192e] border border-cyan-400/40 dark:border-[#00d2ff]/40 text-cyan-700 dark:text-[#00e5ff] text-[10px] font-black">
                   {totalCartCount} items
                 </span>
               </div>
@@ -794,13 +799,13 @@ const SalesView: React.FC<Props> = ({
               {cart.length === 0 ? (
                 /* Empty Cart matching screenshot */
                 <div className="h-full flex flex-col items-center justify-center py-6 text-center">
-                  <div className="w-12 h-12 bg-[#071324] border border-[#162744] rounded-full flex items-center justify-center text-[#00d2ff] mb-2.5 shadow-[0_0_15px_rgba(0,210,255,0.15)]">
+                  <div className="w-12 h-12 bg-slate-100 dark:bg-[#071324] border border-slate-200 dark:border-[#162744] rounded-full flex items-center justify-center text-[#00d2ff] mb-2.5 shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.15)]">
                     <ShoppingCart size={20} className="text-[#00e5ff]" />
                   </div>
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-300 uppercase tracking-wide">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
                     CART IS EMPTY
                   </h4>
-                  <p className="text-[10px] text-[#527196] font-semibold mt-0.5">
+                  <p className="text-[10px] text-slate-500 dark:text-[#527196] font-semibold mt-0.5">
                     Select products from the left catalog
                   </p>
                 </div>
@@ -819,27 +824,27 @@ const SalesView: React.FC<Props> = ({
                         key={item.productId}
                         className={`border rounded-2xl p-2.5 flex flex-col gap-1.5 shadow-sm transition-all ${
                           isZeroStock || isExceedingStock
-                            ? 'bg-[#150a0f] border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]'
+                            ? 'bg-red-50/70 dark:bg-[#150a0f] border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]'
                             : isLowStock
-                            ? 'bg-[#141009] border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.1)]'
-                            : 'bg-[#081222] border-[#162744]'
+                            ? 'bg-amber-50/70 dark:bg-[#141009] border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.1)]'
+                            : 'bg-slate-50 dark:bg-[#081222] border-slate-200 dark:border-[#162744]'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <h5 className="text-xs font-extrabold text-white truncate">
+                            <h5 className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
                               {item.productName}
                             </h5>
-                            <p className="text-[9px] text-[#6b8daf] font-semibold">
+                            <p className="text-[9px] text-slate-500 dark:text-[#6b8daf] font-semibold">
                               ৳{item.pricePerUnit} / {item.unit}
                             </p>
                           </div>
 
                           {/* Quantity Controls */}
-                          <div className="flex items-center gap-1 bg-[#050b14] border border-[#162744] rounded-full px-1.5 py-0.5">
+                          <div className="flex items-center gap-1 bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-full px-1.5 py-0.5 shadow-xs">
                             <button 
                               onClick={() => handleDecrement(index)}
-                              className="w-4.5 h-4.5 rounded-full bg-[#0b192e] text-[#00e5ff] hover:bg-[#00e5ff] hover:text-black flex items-center justify-center transition-colors cursor-pointer"
+                              className="w-4.5 h-4.5 rounded-full bg-slate-100 dark:bg-[#0b192e] text-cyan-700 dark:text-[#00e5ff] hover:bg-[#00e5ff] hover:text-black flex items-center justify-center transition-colors cursor-pointer"
                             >
                               <Minus size={10} />
                             </button>
@@ -848,11 +853,11 @@ const SalesView: React.FC<Props> = ({
                               inputMode="decimal"
                               value={item.displayQuantity !== undefined ? item.displayQuantity : item.quantity}
                               onChange={(e) => updateCartItemQuantity(index, e.target.value)}
-                              className="w-9 text-center bg-transparent text-white font-black text-[11px] outline-none"
+                              className="w-9 text-center bg-transparent text-slate-900 dark:text-white font-black text-[11px] outline-none"
                             />
                             <button 
                               onClick={() => handleIncrement(index)}
-                              className="w-4.5 h-4.5 rounded-full bg-[#0b192e] text-[#00e5ff] hover:bg-[#00e5ff] hover:text-black flex items-center justify-center transition-colors cursor-pointer"
+                              className="w-4.5 h-4.5 rounded-full bg-slate-100 dark:bg-[#0b192e] text-cyan-700 dark:text-[#00e5ff] hover:bg-[#00e5ff] hover:text-black flex items-center justify-center transition-colors cursor-pointer"
                             >
                               <Plus size={10} />
                             </button>
@@ -860,7 +865,7 @@ const SalesView: React.FC<Props> = ({
 
                           {/* Item Total Price */}
                           <div className="text-right min-w-[50px]">
-                            <span className="text-xs font-black text-[#00e5ff]">
+                            <span className="text-xs font-black text-cyan-700 dark:text-[#00e5ff]">
                               ৳{item.subTotal}
                             </span>
                           </div>
@@ -868,7 +873,7 @@ const SalesView: React.FC<Props> = ({
                           {/* Remove Button */}
                           <button 
                             onClick={() => handleRemoveFromCart(index)}
-                            className="text-slate-500 hover:text-red-400 p-1 cursor-pointer transition-colors"
+                            className="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -876,14 +881,14 @@ const SalesView: React.FC<Props> = ({
 
                         {/* Critical / Low Stock Alert Badges */}
                         {(isZeroStock || isLowStock || isExceedingStock) && (
-                          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-white/5">
+                          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/60 dark:border-white/5">
                             {isZeroStock && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 border border-red-500/50 text-[9px] font-black tracking-wider uppercase animate-pulse">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-500/20 text-red-500 dark:text-red-400 border border-red-500/50 text-[9px] font-black tracking-wider uppercase animate-pulse">
                                 <AlertTriangle size={10} /> Critical: 0 In Stock
                               </span>
                             )}
                             {!isZeroStock && isLowStock && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black tracking-wider uppercase">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 text-[9px] font-black tracking-wider uppercase">
                                 <AlertCircle size={10} /> Low Stock: {stock} {item.unit} left
                               </span>
                             )}
@@ -903,16 +908,16 @@ const SalesView: React.FC<Props> = ({
           </div>
 
           {/* Bottom Calculations & Payment Panel (Matching uploaded screenshot) */}
-          <div className="shrink-0 pt-3 border-t border-[#162744] space-y-2.5">
+          <div className="shrink-0 pt-3 border-t border-slate-200 dark:border-[#162744] space-y-2.5">
             
             {/* Subtotal Row */}
-            <div className="flex justify-between items-center text-xs sm:text-[13px] font-black text-slate-300">
+            <div className="flex justify-between items-center text-xs sm:text-[13px] font-black text-slate-700 dark:text-slate-300">
               <span className="tracking-wide">SUBTOTAL (মোট মূল্য)</span>
-              <span className="text-sm sm:text-base font-black text-white">৳{subTotal.toLocaleString()}</span>
+              <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white">৳{subTotal.toLocaleString()}</span>
             </div>
 
             {/* Discount Row */}
-            <div className="flex justify-between items-center text-xs sm:text-[13px] font-black text-slate-300">
+            <div className="flex justify-between items-center text-xs sm:text-[13px] font-black text-slate-700 dark:text-slate-300">
               <span className="tracking-wide">DISCOUNT (ছাড়)</span>
               <div className="relative w-28 sm:w-32">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">৳</span>
@@ -922,19 +927,19 @@ const SalesView: React.FC<Props> = ({
                   placeholder="0"
                   value={discount}
                   onChange={(e) => setDiscount(e.target.value.replace(',', '.'))}
-                  className="w-full px-3 py-1.5 bg-[#050b14] border border-[#162a45] rounded-xl text-center text-xs sm:text-sm font-black text-white outline-none focus:border-[#00e5ff] transition-all"
+                  className="w-full px-3 py-1.5 bg-slate-100 dark:bg-[#050b14] border border-slate-200 dark:border-[#162a45] rounded-xl text-center text-xs sm:text-sm font-black text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] transition-all"
                 />
               </div>
             </div>
 
             {/* Divider */}
-            <div className="border-t border-[#162744]/80 pt-1.5">
+            <div className="border-t border-slate-200 dark:border-[#162744]/80 pt-1.5">
               {/* Total Bill Row (Large Neon Cyan Text) */}
               <div className="flex justify-between items-center">
-                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">
                   TOTAL BILL (সর্বমোট)
                 </span>
-                <span className="text-2xl sm:text-3xl font-black text-[#00e5ff] tracking-tight drop-shadow-[0_0_15px_rgba(0,229,255,0.5)]">
+                <span className="text-2xl sm:text-3xl font-black text-cyan-600 dark:text-[#00e5ff] tracking-tight drop-shadow-xs dark:drop-shadow-[0_0_15px_rgba(0,229,255,0.5)]">
                   ৳{totalBill.toLocaleString()}
                 </span>
               </div>
@@ -944,17 +949,17 @@ const SalesView: React.FC<Props> = ({
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               {/* Payment Method */}
               <div className="space-y-1">
-                <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-[#5c7e9f] block">
+                <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-[#5c7e9f] block">
                   PAYMENT METHOD
                 </label>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#050b14] border border-[#162a45] rounded-xl">
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-[#050b14] border border-slate-200 dark:border-[#162a45] rounded-xl">
                   <button 
                     type="button"
                     onClick={() => setPaymentMethod('Cash')}
                     className={`py-1.5 sm:py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
                       paymentMethod === 'Cash' 
                         ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]' 
-                        : 'text-slate-400 hover:text-white bg-transparent'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-transparent'
                     }`}
                   >
                     Cash
@@ -965,7 +970,7 @@ const SalesView: React.FC<Props> = ({
                     className={`py-1.5 sm:py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
                       paymentMethod === 'Mobile Payment' 
                         ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]' 
-                        : 'text-slate-400 hover:text-white bg-transparent'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-transparent'
                     }`}
                   >
                     Mobile
@@ -976,14 +981,14 @@ const SalesView: React.FC<Props> = ({
               {/* Cash Received Input */}
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-[#5c7e9f] block">
+                  <label className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-[#5c7e9f] block">
                     CASH RECEIVED
                   </label>
                   {paidAmount !== totalBill.toString() && (
                     <button 
                       type="button"
                       onClick={() => setPaidAmount(totalBill.toString())}
-                      className="text-[9px] text-[#00e5ff] hover:underline font-bold"
+                      className="text-[9px] text-cyan-600 dark:text-[#00e5ff] hover:underline font-bold"
                     >
                       FULL
                     </button>
@@ -997,7 +1002,7 @@ const SalesView: React.FC<Props> = ({
                     value={paidAmount}
                     onChange={(e) => setPaidAmount(e.target.value.replace(',', '.'))}
                     placeholder="0"
-                    className="w-full px-3 py-1.5 sm:py-2 bg-[#050b14] border border-[#162a45] rounded-xl text-center text-xs sm:text-sm font-black text-white outline-none focus:border-[#00e5ff] transition-all"
+                    className="w-full px-3 py-1.5 sm:py-2 bg-slate-100 dark:bg-[#050b14] border border-slate-200 dark:border-[#162a45] rounded-xl text-center text-xs sm:text-sm font-black text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] transition-all"
                   />
                 </div>
               </div>
@@ -1009,7 +1014,7 @@ const SalesView: React.FC<Props> = ({
                 <select 
                   value={mobileProvider}
                   onChange={(e) => setMobileProvider(e.target.value as any)}
-                  className="w-full p-2 bg-[#050b14] border border-[#162a45] rounded-xl text-xs font-bold text-white outline-none focus:border-[#00e5ff] cursor-pointer"
+                  className="w-full p-2 bg-slate-100 dark:bg-[#050b14] border border-slate-200 dark:border-[#162a45] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] cursor-pointer"
                 >
                   <option value="bKash">bKash</option>
                   <option value="Nagad">Nagad</option>
@@ -1021,14 +1026,14 @@ const SalesView: React.FC<Props> = ({
                   placeholder="TrxID / Ref (Optional)"
                   value={trxId}
                   onChange={(e) => setTrxId(e.target.value)}
-                  className="w-full p-2 bg-[#050b14] border border-[#162a45] rounded-xl text-xs font-bold text-white placeholder-slate-500 outline-none focus:border-[#00e5ff]"
+                  className="w-full p-2 bg-slate-100 dark:bg-[#050b14] border border-slate-200 dark:border-[#162a45] rounded-xl text-xs font-bold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-[#00e5ff]"
                 />
               </div>
             )}
 
             {/* Change or Due Display */}
             {changeToReturn > 0 && (
-              <div className="flex justify-between items-center p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs font-black text-emerald-400">
+              <div className="flex justify-between items-center p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs font-black text-emerald-600 dark:text-emerald-400">
                 <span>Change to Return:</span>
                 <span className="text-xs sm:text-sm">৳{changeToReturn.toLocaleString()}</span>
               </div>
@@ -1036,7 +1041,7 @@ const SalesView: React.FC<Props> = ({
 
             {isDue && (
               <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-xl space-y-1.5 animate-in fade-in duration-200">
-                <div className="flex justify-between items-center text-xs font-black text-red-400">
+                <div className="flex justify-between items-center text-xs font-black text-red-600 dark:text-red-400">
                   <span>Due Amount:</span>
                   <span className="text-xs sm:text-sm">৳{currentDue.toLocaleString()}</span>
                 </div>
@@ -1046,14 +1051,14 @@ const SalesView: React.FC<Props> = ({
                     placeholder="Customer Name *"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full p-1.5 bg-[#050b14] border border-red-500/40 rounded-lg text-xs font-bold text-white outline-none focus:border-[#00e5ff]"
+                    className="w-full p-1.5 bg-white dark:bg-[#050b14] border border-red-500/40 rounded-lg text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-[#00e5ff]"
                   />
                   <input 
                     type="text" 
                     placeholder="Phone Number *"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full p-1.5 bg-[#050b14] border border-red-500/40 rounded-lg text-xs font-bold text-white outline-none focus:border-[#00e5ff]"
+                    className="w-full p-1.5 bg-white dark:bg-[#050b14] border border-red-500/40 rounded-lg text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-[#00e5ff]"
                   />
                 </div>
               </div>
@@ -1063,10 +1068,10 @@ const SalesView: React.FC<Props> = ({
             <button 
               onClick={handleCompleteSale}
               disabled={!isFormValid}
-              className="w-full py-3.5 px-4 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-[#003847] via-[#005566] to-[#003847] hover:from-[#004e63] hover:to-[#004e63] border border-[#00d2ff]/40 text-[#00e5ff] text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,210,255,0.25)] hover:shadow-[0_0_25px_rgba(0,229,255,0.45)] transition-all"
+              className="smart-cyan-pill w-full py-3.5 px-4 text-black text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_20px_rgba(0,210,255,0.4)] hover:shadow-[0_0_28px_rgba(0,240,255,0.65)] transition-all"
               id="btn_complete_sale"
             >
-              <ShoppingCart size={17} className="text-[#00e5ff]" />
+              <ShoppingCart size={17} className="text-black stroke-[2.5]" />
               <span>COMPLETE SALE (৳{totalBill.toLocaleString()})</span>
             </button>
           </div>
@@ -1076,34 +1081,34 @@ const SalesView: React.FC<Props> = ({
       {/* SALES HISTORY MODAL */}
       {isHistoryModalOpen && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-[#0a1220] border border-[#162744] rounded-[2rem] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden">
+          <div className="bg-white dark:bg-[#0a1220] border border-slate-200 dark:border-[#162744] rounded-[2rem] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl dark:shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden">
             
             {/* Modal Header */}
-            <div className="p-6 border-b border-[#162744] flex items-center justify-between">
+            <div className="p-6 border-b border-slate-200 dark:border-[#162744] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#071324] border border-[#00d2ff]/40 rounded-xl flex items-center justify-center text-[#00e5ff] shadow-[0_0_15px_rgba(0,210,255,0.3)]">
+                <div className="w-10 h-10 bg-slate-100 dark:bg-[#071324] border border-slate-200 dark:border-[#00d2ff]/40 rounded-xl flex items-center justify-center text-cyan-600 dark:text-[#00e5ff] shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.3)]">
                   <History size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-white">Sales History</h3>
-                  <p className="text-xs text-[#5c7e9f] font-semibold">Detailed list of today and previous sales</p>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">Sales History</h3>
+                  <p className="text-xs text-slate-500 dark:text-[#5c7e9f] font-semibold">Detailed list of today and previous sales</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsHistoryModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Filter Tabs & Search */}
-            <div className="p-4 px-6 bg-[#050b14] border-b border-[#162744] flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="p-4 px-6 bg-slate-50 dark:bg-[#050b14] border-b border-slate-200 dark:border-[#162744] flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setHistoryTab('today')}
                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                    historyTab === 'today' ? 'smart-cyan-pill' : 'bg-[#0a1220] text-slate-400 hover:text-white border border-[#162744]'
+                    historyTab === 'today' ? 'smart-cyan-pill text-white' : 'bg-white dark:bg-[#0a1220] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#162744]'
                   }`}
                 >
                   Today ({todaySales.length})
@@ -1111,7 +1116,7 @@ const SalesView: React.FC<Props> = ({
                 <button 
                   onClick={() => setHistoryTab('all')}
                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                    historyTab === 'all' ? 'smart-cyan-pill' : 'bg-[#0a1220] text-slate-400 hover:text-white border border-[#162744]'
+                    historyTab === 'all' ? 'smart-cyan-pill text-white' : 'bg-white dark:bg-[#0a1220] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#162744]'
                   }`}
                 >
                   All Records ({sales.length})
@@ -1125,7 +1130,7 @@ const SalesView: React.FC<Props> = ({
                   placeholder="Search invoice or customer..."
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-[#0a1220] border border-[#162744] rounded-full text-xs font-semibold text-white outline-none focus:border-[#00e5ff]"
+                  className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-[#0a1220] border border-slate-200 dark:border-[#162744] rounded-full text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-[#00e5ff]"
                 />
               </div>
             </div>
@@ -1139,7 +1144,7 @@ const SalesView: React.FC<Props> = ({
               ) : (
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-[#162744] text-[11px] font-black text-[#5c7e9f] uppercase tracking-wider">
+                    <tr className="border-b border-slate-200 dark:border-[#162744] text-[11px] font-black text-slate-500 dark:text-[#5c7e9f] uppercase tracking-wider">
                       <th className="py-3 px-2">Time / Date</th>
                       <th className="py-3 px-2">Items & Customer</th>
                       <th className="py-3 px-2">Method</th>
@@ -1148,40 +1153,40 @@ const SalesView: React.FC<Props> = ({
                       <th className="py-3 px-2 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#162744]/60">
+                  <tbody className="divide-y divide-slate-100 dark:divide-[#162744]/60">
                     {filteredHistory.map(sale => (
-                      <tr key={sale.id} className="hover:bg-[#0c182c] transition-colors text-xs font-semibold">
-                        <td className="py-3 px-2 text-slate-300">
+                      <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-[#0c182c] transition-colors text-xs font-semibold">
+                        <td className="py-3 px-2 text-slate-600 dark:text-slate-300">
                           <div>{new Date(sale.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                          <div className="text-[10px] text-slate-500">{new Date(sale.date).toLocaleDateString()}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">{new Date(sale.date).toLocaleDateString()}</div>
                         </td>
                         <td className="py-3 px-2">
-                          <div className="font-bold text-white">
+                          <div className="font-bold text-slate-900 dark:text-white">
                             {sale.items[0]?.productName} {sale.items.length > 1 ? `+${sale.items.length - 1} more` : ''}
                           </div>
-                          <div className="text-[11px] text-[#5c7e9f]">
+                          <div className="text-[11px] text-slate-500 dark:text-[#5c7e9f]">
                             {sale.customerName ? `${sale.customerName} (${sale.customerPhone || ''})` : 'Walk-in Customer'}
                           </div>
                         </td>
                         <td className="py-3 px-2">
-                          <span className="px-2 py-0.5 rounded-full bg-[#071324] border border-[#162744] text-[10px] text-[#00e5ff]">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#071324] border border-slate-200 dark:border-[#162744] text-[10px] text-cyan-700 dark:text-[#00e5ff] font-bold">
                             {sale.paymentMethod || 'Cash'}
                           </span>
                         </td>
-                        <td className="py-3 px-2 font-black text-white">
+                        <td className="py-3 px-2 font-black text-slate-900 dark:text-white">
                           ৳{sale.totalPrice}
-                          {sale.discount ? <span className="text-[10px] text-amber-400 ml-1">(-৳{sale.discount})</span> : null}
+                          {sale.discount ? <span className="text-[10px] text-amber-600 dark:text-amber-400 ml-1">(-৳{sale.discount})</span> : null}
                         </td>
                         <td className="py-3 px-2">
-                          <div className="text-emerald-400 font-bold">Paid: ৳{sale.amountPaid}</div>
+                          <div className="text-emerald-600 dark:text-emerald-400 font-bold">Paid: ৳{sale.amountPaid}</div>
                           {sale.dueAmount > 0 && (
-                            <div className="text-red-400 text-[10px] font-black">Due: ৳{sale.dueAmount}</div>
+                            <div className="text-red-500 dark:text-red-400 text-[10px] font-black">Due: ৳{sale.dueAmount}</div>
                           )}
                         </td>
                         <td className="py-3 px-2 text-right space-x-1.5">
                           <button 
                             onClick={() => setReceiptSale(sale)}
-                            className="p-1.5 bg-[#071324] hover:bg-[#0c1e38] text-[#00e5ff] border border-[#162744] rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#071324] dark:hover:bg-[#0c1e38] text-cyan-700 dark:text-[#00e5ff] border border-slate-200 dark:border-[#162744] rounded-lg transition-colors cursor-pointer"
                             title="View / Print Receipt"
                           >
                             <Printer size={14} />
@@ -1192,7 +1197,7 @@ const SalesView: React.FC<Props> = ({
                                 onCancelSale(sale.id);
                               }
                             }}
-                            className="p-1.5 bg-[#071324] hover:bg-red-500/20 text-red-400 border border-[#162744] rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 bg-slate-100 hover:bg-red-50 dark:bg-[#071324] dark:hover:bg-red-500/20 text-red-500 dark:text-red-400 border border-slate-200 dark:border-[#162744] rounded-lg transition-colors cursor-pointer"
                             title="Cancel Sale"
                           >
                             <Trash2 size={14} />
@@ -1206,10 +1211,10 @@ const SalesView: React.FC<Props> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 px-6 border-t border-[#162744] flex justify-end">
+            <div className="p-4 px-6 border-t border-slate-200 dark:border-[#162744] flex justify-end">
               <button 
                 onClick={() => setIsHistoryModalOpen(false)}
-                className="smart-cyan-pill px-8 py-2.5 text-xs font-bold uppercase cursor-pointer"
+                className="smart-cyan-pill px-8 py-2.5 text-xs font-bold uppercase cursor-pointer text-white"
               >
                 Close
               </button>

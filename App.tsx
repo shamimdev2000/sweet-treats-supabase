@@ -16,6 +16,8 @@ import WastageView from './components/WastageView';
 import ProductionView from './components/ProductionView';
 import DailyNotesView from './components/DailyNotesView';
 import Login from './components/Login';
+import { OfflineIndicator, NetworkStatusBadge } from './components/OfflineIndicator';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import { storageService } from './services/storageService';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import { 
@@ -98,6 +100,23 @@ const App: React.FC = () => {
       return 'dark';
     }
   });
+
+  // Sync theme with document.documentElement and localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('sweetBakery_theme', theme);
+    } catch (e) {
+      console.warn('Failed to save theme in localStorage:', e);
+    }
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    }
+  }, [theme]);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
@@ -425,17 +444,20 @@ const App: React.FC = () => {
   };
 
   const deleteProduct = (id: string) => {
+    const targetProduct = products.find(p => p.id === id);
+    const prodName = targetProduct?.name || 'this product';
     setConfirmModal({
       isOpen: true,
-      title: "Delete Product?",
-      message: "Do you want to delete this product?",
-      confirmText: "Delete",
+      title: "Delete Product Permanently?",
+      message: `Are you sure you want to permanently delete "${prodName}" from inventory? This action cannot be undone and will delete it from database and local storage.`,
+      confirmText: "Delete Permanently",
       type: 'danger',
       onConfirm: () => {
         setProducts(prev => prev.filter(p => p.id !== id));
         withSync(async () => {
           await storageService.deleteProduct(userEmail, id);
         });
+        toast.success(`"${prodName}" has been permanently deleted.`);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -872,19 +894,19 @@ const App: React.FC = () => {
               }}
               className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-200 cursor-pointer border ${
                 isAdminViewActive && isManagerAuthenticated
-                  ? 'bg-[#09172c] border-[#00d2ff]/40 text-white shadow-[0_0_15px_rgba(0,210,255,0.2)]'
-                  : 'bg-[#060e1c] hover:bg-[#0c1c33] border-[#162744] text-slate-300 hover:text-white'
+                  ? 'bg-cyan-50 dark:bg-[#09172c] border-cyan-400 dark:border-[#00d2ff]/40 text-slate-900 dark:text-white shadow-sm dark:shadow-[0_0_15px_rgba(0,210,255,0.2)]'
+                  : 'bg-slate-50 hover:bg-slate-100 dark:bg-[#060e1c] dark:hover:bg-[#0c1c33] border-slate-200 dark:border-[#162744] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  isAdminViewActive && isManagerAuthenticated ? 'bg-[#00e5ff] text-black shadow-[0_0_10px_#00e5ff]' : 'bg-[#0c182b] text-[#00e5ff]'
+                  isAdminViewActive && isManagerAuthenticated ? 'bg-[#00e5ff] text-black shadow-[0_0_10px_#00e5ff]' : 'bg-slate-100 dark:bg-[#0c182b] text-[#00e5ff]'
                 }`}>
                   <Shield size={18} />
                 </div>
                 <div className="text-left">
-                  <div className="text-sm font-extrabold tracking-wide text-white">Admin Panel</div>
-                  <div className="text-[10px] font-bold text-[#577b9f]">
+                  <div className="text-sm font-extrabold tracking-wide text-slate-900 dark:text-white">Admin Panel</div>
+                  <div className="text-[10px] font-bold text-slate-500 dark:text-[#577b9f]">
                     {adminNavItems.length} Management Tools
                   </div>
                 </div>
@@ -906,7 +928,7 @@ const App: React.FC = () => {
 
             {/* Admin Panel Sub Items (Strictly hidden until authenticated and expanded) */}
             {isAdminPanelOpen && isManagerAuthenticated && (
-              <div className="mt-2 ml-2 pl-3 border-l-2 border-[#162744] space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="mt-2 ml-2 pl-3 border-l-2 border-slate-200 dark:border-[#162744] space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
                 {adminNavItems.map((item) => {
                   const isActive = currentView === item.id;
                   return (
@@ -919,7 +941,7 @@ const App: React.FC = () => {
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-150 cursor-pointer ${
                         isActive 
                           ? 'smart-cyan-pill font-bold text-xs tracking-wide shadow-[0_0_12px_rgba(0,229,255,0.3)]' 
-                          : 'text-slate-400 hover:text-white hover:bg-[#0c1c33] font-medium text-xs border border-transparent'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#0c1c33] font-medium text-xs border border-transparent'
                       }`}
                     >
                       <span className={isActive ? 'text-white' : 'text-[#00d2ff]'}>{item.icon}</span>
@@ -935,7 +957,7 @@ const App: React.FC = () => {
 
                 <button
                   onClick={() => handleLockAdmin()}
-                  className="w-full mt-3 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#1d0d0d] hover:bg-[#2d1212] border border-red-500/40 text-red-400 font-bold text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
+                  className="w-full mt-3 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-600 dark:text-red-400 font-bold text-xs uppercase tracking-wider transition-all shadow-sm active:scale-95 cursor-pointer"
                 >
                   <Lock size={16} />
                   <span>Lock Admin Panel</span>
@@ -958,7 +980,7 @@ const App: React.FC = () => {
                   className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-full transition-all duration-200 cursor-pointer ${
                     isActive 
                       ? 'smart-cyan-pill font-bold tracking-wide' 
-                      : 'text-slate-500 dark:text-slate-400 hover:text-white hover:bg-[#0e1b32] font-semibold border border-transparent'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#0e1b32] font-semibold border border-transparent'
                   }`}
                 >
                   <span className={isActive ? 'text-white' : 'text-[#00d2ff]'}>{item.icon}</span>
@@ -995,16 +1017,41 @@ const App: React.FC = () => {
             </button>
           )}
           
-          <div className="p-3.5 bg-slate-50 dark:bg-[#0a1424] rounded-2xl border border-slate-200 dark:border-[#162744]">
-            <div className="text-[10px] font-black uppercase text-[#00e5ff] mb-1">Bakery Status</div>
+          <div className="p-3.5 bg-slate-50 dark:bg-[#0a1424] rounded-2xl border border-slate-200 dark:border-[#162744] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-black uppercase text-[#00e5ff]">App Status</div>
+              <NetworkStatusBadge compact />
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-900 dark:text-white">v3.4.0</span>
               <span className={`w-1.5 h-1.5 rounded-full ${isStandalone ? 'bg-emerald-400' : 'bg-cyan-400 shadow-[0_0_6px_#00e5ff]'}`}></span>
               <span className={`text-[10px] font-bold uppercase ${isStandalone ? 'text-emerald-400' : 'text-cyan-400'}`}>
-                {isStandalone ? 'Standalone App' : 'Smart Manager'}
+                {isStandalone ? 'Offline PWA Active' : 'Smart POS'}
               </span>
             </div>
-            <p className="text-[9px] text-slate-500 font-bold mt-1">User: <span className="capitalize text-slate-400">{userEmail.split('@')[0]}</span></p>
+            <PWAInstallButton variant="sidebar" />
+            <p className="text-[9px] text-slate-500 font-bold mt-1">User: <span className="capitalize text-slate-600 dark:text-slate-400">{userEmail.split('@')[0]}</span></p>
+            <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-200 dark:border-[#162744]">
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Theme</span>
+              <button
+                type="button"
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-200/80 dark:bg-[#060c18] border border-slate-300 dark:border-[#162744] text-[11px] font-bold text-slate-800 dark:text-[#00e5ff] hover:bg-slate-300 dark:hover:bg-[#0c182b] transition-all cursor-pointer"
+                title="Toggle Dark/Light Mode"
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <Sun size={12} className="text-amber-400" />
+                    <span>Light Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon size={12} className="text-cyan-600" />
+                    <span>Dark Mode</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -1022,6 +1069,9 @@ const App: React.FC = () => {
             {syncStatus === 'saving' ? 'Saving...' : syncStatus === 'saved' ? 'Saved Locally' : 'Error Saving'}
           </div>
         )}
+        
+        {/* Workbox Offline and Connectivity Banner */}
+        <OfflineIndicator />
         
         {currentView !== View.SALES && (
           <header className="px-3.5 sm:px-6 py-3 sm:py-4 bg-white/80 dark:bg-[#050b14]/90 backdrop-blur-xl sticky top-0 z-40 flex justify-between items-center border-b border-slate-200 dark:border-[#162744]">
@@ -1041,6 +1091,8 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+              <NetworkStatusBadge />
+              <PWAInstallButton variant="header" />
               <button 
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
                 className="p-2 sm:p-3 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-xl sm:rounded-2xl text-[#00e5ff] shadow-sm transition-all active:scale-95 cursor-pointer"
@@ -1140,14 +1192,14 @@ const App: React.FC = () => {
 
         {/* Mobile Bottom Navigation Bar (Shown on mobile screens for quick navigation across core views) */}
         {currentView !== View.SALES && (
-          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#070d19]/95 dark:bg-[#070d19]/95 backdrop-blur-xl border-t border-slate-200 dark:border-[#162744] px-2 py-1.5 flex items-center justify-around shadow-[0_-5px_25px_rgba(0,0,0,0.5)]">
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#070d19]/95 backdrop-blur-xl border-t border-slate-200 dark:border-[#162744] px-2 py-1.5 flex items-center justify-around shadow-[0_-5px_25px_rgba(0,0,0,0.15)] dark:shadow-[0_-5px_25px_rgba(0,0,0,0.5)]">
             <button
               onClick={() => handleViewChange(View.SALES)}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-                currentView === View.SALES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+                currentView === View.SALES ? 'text-cyan-600 dark:text-[#00e5ff] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${currentView === View.SALES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${currentView === View.SALES ? 'bg-cyan-500/20 shadow-[0_0_10px_rgba(0,210,255,0.4)]' : ''}`}>
                 <ShoppingCart size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">POS Sale</span>
@@ -1156,10 +1208,10 @@ const App: React.FC = () => {
             <button
               onClick={() => handleViewChange(View.INVENTORY)}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-                currentView === View.INVENTORY ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+                currentView === View.INVENTORY ? 'text-cyan-600 dark:text-[#00e5ff] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${currentView === View.INVENTORY ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${currentView === View.INVENTORY ? 'bg-cyan-500/20 shadow-[0_0_10px_rgba(0,210,255,0.4)]' : ''}`}>
                 <Package size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">Stock</span>
@@ -1168,10 +1220,10 @@ const App: React.FC = () => {
             <button
               onClick={() => handleViewChange(View.DUES)}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
-                currentView === View.DUES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+                currentView === View.DUES ? 'text-cyan-600 dark:text-[#00e5ff] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${currentView === View.DUES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${currentView === View.DUES ? 'bg-cyan-500/20 shadow-[0_0_10px_rgba(0,210,255,0.4)]' : ''}`}>
                 <Wallet size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">Dues</span>
@@ -1183,10 +1235,10 @@ const App: React.FC = () => {
             <button
               onClick={() => handleViewChange(View.NOTES)}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
-                currentView === View.NOTES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+                currentView === View.NOTES ? 'text-cyan-600 dark:text-[#00e5ff] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${currentView === View.NOTES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${currentView === View.NOTES ? 'bg-cyan-500/20 shadow-[0_0_10px_rgba(0,210,255,0.4)]' : ''}`}>
                 <StickyNote size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">Notes</span>
@@ -1198,10 +1250,10 @@ const App: React.FC = () => {
             <button
               onClick={() => handleViewChange(View.DASHBOARD)}
               className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
-                currentView === View.DASHBOARD ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+                currentView === View.DASHBOARD ? 'text-cyan-600 dark:text-[#00e5ff] font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${currentView === View.DASHBOARD ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${currentView === View.DASHBOARD ? 'bg-cyan-500/20 shadow-[0_0_10px_rgba(0,210,255,0.4)]' : ''}`}>
                 <LayoutDashboard size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">Dashboard</span>
@@ -1209,9 +1261,9 @@ const App: React.FC = () => {
 
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
+              className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
             >
-              <div className="p-1.5 rounded-lg bg-[#0c182b] text-[#00d2ff]">
+              <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-[#0c182b] text-cyan-600 dark:text-[#00d2ff]">
                 <Menu size={18} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5 font-bold">More</span>
@@ -1221,13 +1273,13 @@ const App: React.FC = () => {
 
         {/* Manager Lock Modal */}
         {showLockModal && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-300">
-            <div className="bg-[#0a1220] p-8 sm:p-10 rounded-[2.5rem] border border-[#162744] shadow-[0_20px_60px_rgba(0,0,0,0.9)] w-full max-w-md animate-in zoom-in duration-300">
-              <div className="w-20 h-20 bg-[#071324] border border-[#00d2ff]/40 rounded-3xl flex items-center justify-center mx-auto mb-6 text-[#00e5ff] shadow-[0_0_25px_rgba(0,210,255,0.3)]">
-                <Lock size={38} className="drop-shadow-[0_0_10px_rgba(0,229,255,0.8)]" />
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/60 dark:bg-black/85 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-[#0a1220] p-8 sm:p-10 rounded-[2.5rem] border border-slate-200 dark:border-[#162744] shadow-2xl dark:shadow-[0_20px_60px_rgba(0,0,0,0.9)] w-full max-w-md animate-in zoom-in duration-300">
+              <div className="w-20 h-20 bg-cyan-50 dark:bg-[#071324] border border-cyan-500/30 dark:border-[#00d2ff]/40 rounded-3xl flex items-center justify-center mx-auto mb-6 text-cyan-600 dark:text-[#00e5ff] shadow-md dark:shadow-[0_0_25px_rgba(0,210,255,0.3)]">
+                <Lock size={38} className="drop-shadow-sm dark:drop-shadow-[0_0_10px_rgba(0,229,255,0.8)]" />
               </div>
-              <h3 className="text-2xl font-black text-white text-center mb-1 uppercase tracking-tight">Admin Lock</h3>
-              <p className="text-[#00d2ff] text-center mb-8 text-xs font-bold uppercase tracking-widest">Enter 6-Digit Security PIN</p>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-1 uppercase tracking-tight">Admin Lock</h3>
+              <p className="text-cyan-600 dark:text-[#00d2ff] text-center mb-8 text-xs font-bold uppercase tracking-widest">Enter 6-Digit Security PIN</p>
               
               <form onSubmit={handleUnlock} className="space-y-6">
                 <div className="space-y-2">
@@ -1235,12 +1287,12 @@ const App: React.FC = () => {
                     type="password" 
                     maxLength={6}
                     autoFocus
-                    className={`w-full bg-[#050b14] border-2 rounded-2xl p-4 text-center text-3xl font-black tracking-[0.5em] outline-none text-white transition-all ${lockError ? 'border-red-500 animate-shake' : 'border-[#162a45] focus:border-[#00d2ff] focus:shadow-[0_0_20px_rgba(0,210,255,0.35)]'}`}
+                    className={`w-full bg-slate-50 dark:bg-[#050b14] border-2 rounded-2xl p-4 text-center text-3xl font-black tracking-[0.5em] outline-none text-slate-900 dark:text-white transition-all ${lockError ? 'border-red-500 animate-shake' : 'border-slate-200 dark:border-[#162a45] focus:border-cyan-500 dark:focus:border-[#00d2ff] focus:shadow-[0_0_20px_rgba(0,210,255,0.35)]'}`}
                     placeholder="••••••"
                     value={lockInput}
                     onChange={e => setLockInput(e.target.value)}
                   />
-                  {lockError && <p className="text-red-400 text-[11px] font-black text-center uppercase tracking-widest mt-2">Wrong password! Try again.</p>}
+                  {lockError && <p className="text-red-500 dark:text-red-400 text-[11px] font-black text-center uppercase tracking-widest mt-2">Wrong password! Try again.</p>}
                 </div>
                 
                 <div className="flex flex-col gap-3 pt-2">
@@ -1253,7 +1305,7 @@ const App: React.FC = () => {
                   <button 
                     type="button"
                     onClick={() => setShowLockModal(false)}
-                    className="w-full text-slate-400 font-bold py-2.5 hover:text-white transition-all text-xs uppercase tracking-widest cursor-pointer text-center"
+                    className="w-full text-slate-500 dark:text-slate-400 font-bold py-2.5 hover:text-slate-900 dark:hover:text-white transition-all text-xs uppercase tracking-widest cursor-pointer text-center"
                   >
                     Cancel
                   </button>

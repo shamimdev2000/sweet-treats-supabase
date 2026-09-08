@@ -128,8 +128,8 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                  )}
                  <div className="space-y-2 relative">
                     <div className="flex items-center justify-between px-1">
-                      <label className="text-xs font-bold text-slate-400 uppercase">Product (পণ্য নির্বাচন)</label>
-                      <span className="text-[11px] text-[#00e5ff] font-medium">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Product (পণ্য নির্বাচন)</label>
+                      <span className="text-[11px] text-cyan-600 dark:text-[#00e5ff] font-medium">
                         {products.length > 0 ? `${products.length}টি পণ্য` : 'কোনো পণ্য নেই'}
                       </span>
                     </div>
@@ -139,7 +139,7 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                         required
                         autoComplete="off"
                         placeholder="পণ্যের নাম লিখুন বা ক্লিক করে সিলেক্ট করুন..."
-                        className="w-full p-3.5 pr-10 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm"
+                        className="w-full p-3.5 pr-10 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm"
                         value={productSearchTerm}
                         onChange={(e) => {
                           setProductSearchTerm(e.target.value);
@@ -158,7 +158,7 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                             setSelectedProductId('');
                             setIsProductDropdownOpen(true);
                           }}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold px-1 py-0.5 cursor-pointer"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900 dark:hover:text-white text-xs font-bold px-1 py-0.5 cursor-pointer"
                         >
                           ✕
                         </button>
@@ -168,7 +168,7 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                       <div className="absolute z-50 w-full mt-1.5 bg-white dark:bg-[#070e1b] border border-slate-200 dark:border-[#00d2ff]/40 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-[#162744]">
                         <div className="px-3.5 py-1.5 bg-slate-100 dark:bg-[#0a1527] text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between sticky top-0 z-10">
                           <span>{productSearchTerm ? 'অনুসন্ধানের ফলাফল:' : 'সব পণ্য (ক্লিক করে নির্বাচন করুন):'}</span>
-                          <span className="text-[#00e5ff]">{filteredProducts.length}টি পাওয়া গেছে</span>
+                          <span className="text-cyan-600 dark:text-[#00e5ff]">{filteredProducts.length}টি পাওয়া গেছে</span>
                         </div>
                         {filteredProducts.length === 0 ? (
                           <div className="px-4 py-4 text-center text-xs text-slate-400">
@@ -188,7 +188,7 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                               className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-[#0a1527] text-slate-900 dark:text-white flex items-center justify-between transition-colors text-sm cursor-pointer group"
                             >
                               <div className="min-w-0 pr-2">
-                                <div className="font-bold group-hover:text-[#00e5ff] transition-colors truncate">
+                                <div className="font-bold group-hover:text-cyan-600 dark:group-hover:text-[#00e5ff] transition-colors truncate">
                                   {p.name}
                                 </div>
                                 <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
@@ -198,7 +198,7 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                                 </div>
                               </div>
                               <div className="text-right shrink-0">
-                                <div className="text-xs font-bold text-[#00e5ff]">৳{p.price}</div>
+                                <div className="text-xs font-bold text-cyan-600 dark:text-[#00e5ff]">৳{p.price}</div>
                                 <div className="text-[10px] text-slate-400">প্রতি {p.unit}</div>
                               </div>
                             </button>
@@ -208,12 +208,12 @@ const WastageView: React.FC<Props> = ({ wastage, products, onAdd, onDelete, clos
                     )}
                  </div>
                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase px-1">Quantity</label>
-                    <input required type="number" step="any" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm font-bold" value={qty} onChange={e => setQty(e.target.value === '' ? '' : Number(e.target.value))} />
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase px-1">Quantity</label>
+                    <input required type="number" step="any" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm font-bold" value={qty} onChange={e => setQty(e.target.value === '' ? '' : Number(e.target.value))} />
                  </div>
                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase px-1">Reason</label>
-                    <select className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm" value={reason} onChange={e => setReason(e.target.value)}>
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase px-1">Reason</label>
+                    <select className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-cyan-500 dark:focus:border-[#00e5ff] text-sm" value={reason} onChange={e => setReason(e.target.value)}>
                       <option value="Expired">Expired</option>
                       <option value="Damaged">Damaged</option>
                       <option value="Burnt">Burnt</option>

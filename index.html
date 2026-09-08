@@ -12,6 +12,16 @@
     <link rel="manifest" href="/manifest.json">
     
     <title>Bakery Management System - Smart Manager</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('sweetBakery_theme');
+        if (savedTheme === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script>
@@ -47,7 +57,9 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background-color: #050b14; }
+        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; transition: background-color 0.2s ease, color 0.2s ease; }
+        html.dark body { background-color: #050b14; color: #ffffff; }
+        html:not(.dark) body { background-color: #f8fafc; color: #0f172a; }
         #root { min-height: 100vh; }
         /* Custom scrollbar for better look */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -84,24 +96,6 @@
             inset 0 1.5px 2px rgba(0, 15, 40, 0.5);
         }
     </style>
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "@google/genai": "https://esm.sh/@google/genai@1.35.0",
-    "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.473.0?external=react",
-    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/"
-  }
-}
-</script>
-  <meta property="og:image" content="https://bolt.new/static/og_default.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://bolt.new/static/og_default.png">
 </head>
 <body class="bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-white">
     <div id="root"></div>

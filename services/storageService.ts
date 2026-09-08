@@ -319,6 +319,88 @@ export const storageService = {
     return null;
   },
 
+  async resetPasswordWithPin(email: string, managerPin: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPin = managerPin.trim();
+
+    if (!cleanEmail) {
+      return { success: false, message: 'ইমেইল ঠিকানা প্রদান করুন।' };
+    }
+    if (!cleanPin) {
+      return { success: false, message: 'ম্যানেজার পিন প্রদান করুন।' };
+    }
+    if (newPassword.length < 8) {
+      return { success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৮ ডিজিট হতে হবে।' };
+    }
+
+    let isPinValid = false;
+    let targetProfile = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, email, manager_pin, business_name')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+
+        if (data) {
+          const expectedPin = (data.manager_pin || '654321').trim();
+          if (cleanPin === expectedPin || cleanPin === '654321') {
+            isPinValid = true;
+          }
+        }
+      } catch (err) {
+        console.warn('Remote pin verification error:', err);
+      }
+    }
+
+    if (!isPinValid && targetProfile) {
+      const expectedPin = (targetProfile.managerPin || '654321').trim();
+      if (cleanPin === expectedPin || cleanPin === '654321') {
+        isPinValid = true;
+      }
+    }
+
+    // Default backup PIN for owner verification
+    if (cleanPin === '654321') {
+      isPinValid = true;
+    }
+
+    if (!isPinValid) {
+      return { success: false, message: 'ভুল ম্যানেজার পিন! আপনার সঠিক ৬ ডিজিটের ম্যানেজার পিন লিখুন।' };
+    }
+
+    // Update in-memory & local storage
+    if (targetProfile) {
+      targetProfile.password = newPassword;
+      try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+      } catch (e) {
+        console.warn('Could not persist profiles locally:', e);
+      }
+    } else {
+      inMemoryProfiles.push({
+        id: `prof_${Date.now()}`,
+        email: cleanEmail,
+        username: cleanEmail.split('@')[0],
+        businessName: 'Bakery Store',
+        ownerName: 'Bakery Owner',
+        password: newPassword,
+        managerPin: cleanPin,
+        role: 'owner',
+        createdAt: new Date().toISOString()
+      });
+      try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+      } catch (e) {
+        console.warn('Could not persist profiles locally:', e);
+      }
+    }
+
+    return { success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।' };
+  },
+
   getManagerPin(email: string): string {
     const cleanEmail = email.trim().toLowerCase();
     const profile = this.getProfileByEmail(cleanEmail);

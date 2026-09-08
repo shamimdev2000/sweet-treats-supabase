@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { Product } from '../types';
 import { generateId } from '../services/idGenerator';
-import { Plus, Search, Package, Trash2, ChevronDown, AlertCircle, Banknote, Edit3, X, AlertTriangle, Trash, Barcode } from 'lucide-react';
+import { Plus, Search, Package, Trash2, ChevronDown, AlertCircle, Banknote, Edit3, X, AlertTriangle, Barcode, PackageMinus } from 'lucide-react';
 
 interface Props {
   products: Product[];
@@ -22,7 +22,6 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
   const [filterLowStock, setFilterLowStock] = useState(false);
   
   // Custom Modal States
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [wastageModalProduct, setWastageModalProduct] = useState<Product | null>(null);
   const [wastageQty, setWastageQty] = useState<number | ''>('');
   const [wastageReason, setWastageReason] = useState('Expired');
@@ -91,17 +90,6 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
     });
     setEditingId(p.id);
     setIsAdding(true);
-  };
-
-  const executeDelete = () => {
-    if (confirmDeleteId) {
-      onDelete(confirmDeleteId);
-      setConfirmDeleteId(null);
-      if (editingId === confirmDeleteId) {
-        setIsAdding(false);
-        setEditingId(null);
-      }
-    }
   };
 
   const getStockStatus = (p: Product): 'critical' | 'warning' | 'normal' => {
@@ -237,7 +225,7 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
         <div className="flex items-center gap-3 w-full md:w-auto">
           <button 
             onClick={() => setFilterLowStock(!filterLowStock)}
-            className={`px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border cursor-pointer ${filterLowStock ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-slate-50 dark:bg-[#0a1527] text-slate-400 border-slate-200 dark:border-[#162744] hover:text-white'}`}
+            className={`px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition-all border cursor-pointer ${filterLowStock ? 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20' : 'bg-slate-50 dark:bg-[#0a1527] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-[#162744] hover:text-slate-900 dark:hover:text-white'}`}
           >
             <AlertTriangle size={16} />
             Low Stock
@@ -262,8 +250,8 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
            <div className="bg-white dark:bg-[#070e1b] p-8 rounded-3xl border border-slate-200 dark:border-[#162744] shadow-2xl w-full max-w-md animate-in zoom-in duration-300">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold flex items-center gap-3 text-slate-900 dark:text-white">
-                   <div className="w-10 h-10 bg-[#0a1527] border border-[#00d2ff]/30 rounded-xl flex items-center justify-center text-[#00e5ff]">
-                     <Trash size={18} />
+                   <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center text-amber-500">
+                     <PackageMinus size={20} />
                    </div>
                    Mark Wastage
                 </h3>
@@ -336,7 +324,14 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
                   </span>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1.5">
+                <button 
+                  onClick={() => handleEdit(p)} 
+                  className="p-2 text-slate-400 hover:text-[#00e5ff] transition-all bg-slate-100 dark:bg-[#0a1527] hover:border-[#00e5ff]/40 rounded-xl border border-slate-200 dark:border-[#162744] cursor-pointer active:scale-90"
+                  title="Edit Product / এডিট করুন"
+                >
+                  <Edit3 size={15} />
+                </button>
                 <button 
                   onClick={() => {
                     const action = () => setWastageModalProduct(p);
@@ -346,17 +341,24 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
                       onRequireAuth(action);
                     }
                   }} 
-                  className="p-2 text-slate-400 hover:text-white bg-slate-100 dark:bg-[#0a1527] hover:bg-rose-500 border border-slate-200 dark:border-[#162744] hover:border-rose-500 transition-all rounded-xl cursor-pointer active:scale-90"
-                  title="Mark Wastage"
+                  className="p-2 text-slate-400 hover:text-amber-400 bg-slate-100 dark:bg-[#0a1527] hover:bg-amber-500/10 border border-slate-200 dark:border-[#162744] hover:border-amber-500/40 transition-all rounded-xl cursor-pointer active:scale-90"
+                  title="Mark Wastage / নষ্ট পণ্য লিপিবদ্ধ"
                 >
-                  <Trash size={16} />
+                  <PackageMinus size={15} />
                 </button>
                 <button 
-                  onClick={() => handleEdit(p)} 
-                  className="p-2 text-slate-400 hover:text-[#00e5ff] transition-all bg-slate-100 dark:bg-[#0a1527] hover:border-[#00e5ff]/40 rounded-xl border border-slate-200 dark:border-[#162744] cursor-pointer active:scale-90"
-                  title="Edit Product"
+                  onClick={() => {
+                    const action = () => onDelete(p.id);
+                    if (isManagerAuthenticated) {
+                      action();
+                    } else {
+                      onRequireAuth(action);
+                    }
+                  }} 
+                  className="p-2 text-slate-400 hover:text-white bg-slate-100 dark:bg-[#0a1527] hover:bg-red-500 border border-slate-200 dark:border-[#162744] hover:border-red-500 transition-all rounded-xl cursor-pointer active:scale-90"
+                  title="Delete Product Permanently / স্থায়ীভাবে ডিলিট করুন"
                 >
-                  <Edit3 size={16} />
+                  <Trash2 size={15} />
                 </button>
               </div>
             </div>
@@ -404,23 +406,6 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
           </div>
         )}
       </div>
-
-      {/* Delete Modal */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-[#070e1b] p-8 rounded-3xl border border-slate-200 dark:border-[#162744] shadow-2xl w-full max-w-md animate-in zoom-in duration-300 text-center">
-            <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-5 text-red-500 border border-red-500/20">
-              <AlertTriangle size={36} />
-            </div>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Are you sure?</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">This action cannot be undone.</p>
-            <div className="flex flex-col gap-3">
-              <button onClick={executeDelete} className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3.5 rounded-2xl cursor-pointer transition-all">Delete Item</button>
-              <button onClick={() => setConfirmDeleteId(null)} className="w-full bg-slate-100 dark:bg-[#0a1527] text-slate-400 font-bold py-3.5 rounded-2xl hover:text-white cursor-pointer transition-all">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add/Edit Modal */}
       {isAdding && (
@@ -478,9 +463,31 @@ const Inventory: React.FC<Props> = ({ products, onAdd, onUpdate, onDelete, onMar
                 <label className="text-xs font-bold text-slate-400 uppercase px-1 flex items-center gap-2"><Barcode size={14} className="text-[#00e5ff]" /> Barcode</label>
                 <input type="text" className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-[#0a1527] border border-slate-200 dark:border-[#162744] text-slate-900 dark:text-white outline-none focus:border-[#00e5ff] text-sm" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Optional barcode..." />
               </div>
-              <div className="md:col-span-2 flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => {setIsAdding(false); setEditingId(null);}} className="px-6 py-3 text-slate-400 font-semibold hover:text-white transition-colors cursor-pointer text-xs uppercase tracking-wider">Cancel</button>
-                <button type="submit" className="smart-cyan-pill px-8 py-3.5 uppercase tracking-wider text-xs cursor-pointer">Save Product</button>
+              <div className="md:col-span-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-[#162744]">
+                {editingId ? (
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const idToDelete = editingId;
+                      setIsAdding(false);
+                      setEditingId(null);
+                      const action = () => onDelete(idToDelete);
+                      if (isManagerAuthenticated) {
+                        action();
+                      } else {
+                        onRequireAuth(action);
+                      }
+                    }} 
+                    className="px-4 py-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 order-2 sm:order-1"
+                  >
+                    <Trash2 size={15} />
+                    <span>Delete Permanently</span>
+                  </button>
+                ) : <div className="hidden sm:block" />}
+                <div className="flex items-center justify-end gap-3 order-1 sm:order-2">
+                  <button type="button" onClick={() => {setIsAdding(false); setEditingId(null);}} className="px-5 py-3 text-slate-500 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer text-xs uppercase tracking-wider">Cancel</button>
+                  <button type="submit" className="smart-cyan-pill px-8 py-3.5 uppercase tracking-wider text-xs cursor-pointer">Save Product</button>
+                </div>
               </div>
             </form>
           </div>
