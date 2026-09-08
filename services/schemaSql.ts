@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     owner_name TEXT,
     phone TEXT,
     address TEXT,
-    manager_pin TEXT NOT NULL DEFAULT '1234',
+    manager_pin TEXT NOT NULL DEFAULT '654321',
     currency_symbol TEXT DEFAULT '৳',
     receipt_footer TEXT DEFAULT 'Thank you for shopping with us!',
     branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,

@@ -364,16 +364,16 @@ const DailyClosingView: React.FC<Props> = ({
           )}
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-left" id="closings_table">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full min-w-[650px] text-left" id="closings_table">
             <thead>
               <tr className="text-[10px] uppercase text-slate-400 font-bold border-b border-slate-100 dark:border-[#162744] bg-slate-50/50 dark:bg-[#0a1527]/50">
-                <th className="px-8 py-4">Date</th>
-                <th className="px-8 py-4">System Balance</th>
-                <th className="px-8 py-4">Actual Cash</th>
-                <th className="px-8 py-4">Difference</th>
-                <th className="px-8 py-4">Closed By</th>
-                <th className="px-8 py-4 text-right">Action</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">Date</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">System Balance</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">Actual Cash</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">Difference</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">Closed By</th>
+                <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#162744]">
@@ -382,7 +382,7 @@ const DailyClosingView: React.FC<Props> = ({
                 return (
                   <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-[#0a1527]/50 transition-colors text-sm">
                     {/* Date cell */}
-                    <td className="px-8 py-4 font-bold text-slate-700 dark:text-slate-200">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 font-bold text-slate-700 dark:text-slate-200">
                       {isEditing ? (
                         <input 
                           type="date" 
@@ -396,12 +396,12 @@ const DailyClosingView: React.FC<Props> = ({
                     </td>
                     
                     {/* System Balance cell */}
-                    <td className="px-8 py-4 font-bold text-slate-400">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 font-bold text-slate-400">
                       ৳{(c.systemBalance || 0).toLocaleString()}
                     </td>
                     
                     {/* Actual Cash cell */}
-                    <td className="px-8 py-4 font-bold text-slate-900 dark:text-white text-base">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 font-bold text-slate-900 dark:text-white text-base">
                       {isEditing ? (
                         <div className="flex items-center gap-1">
                           <span className="text-slate-400 text-xs mr-1">৳</span>
@@ -419,17 +419,17 @@ const DailyClosingView: React.FC<Props> = ({
                     </td>
 
                     {/* Difference Cell */}
-                    <td className={`px-8 py-4 font-bold ${c.difference >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td className={`px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 font-bold ${c.difference >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {c.difference >= 0 ? '+' : ''}৳{(c.difference || 0).toLocaleString()}
                     </td>
 
                     {/* Closed By Cell */}
-                    <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-slate-400 text-xs font-medium">
                       {c.closedBy.split('@')[0]}
                     </td>
                     
                     {/* Actions cell */}
-                    <td className="px-8 py-4 text-right">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-right">
                       <div className="flex justify-end gap-1.5">
                         {isEditing ? (
                           <>

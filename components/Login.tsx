@@ -9,9 +9,7 @@ import {
   UserPlus, 
   AlertCircle, 
   Check, 
-  Loader2, 
-  ShieldCheck,
-  Database
+  Loader2
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
@@ -31,7 +29,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   // Sign Up State
   const [businessName, setBusinessName] = useState('');
   const [ownerName, setOwnerName] = useState('');
-  const [managerPin, setManagerPin] = useState('');
   
   // Status
   const [error, setError] = useState('');
@@ -115,16 +112,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanBusiness = businessName.trim();
     const cleanOwner = ownerName.trim();
-    const cleanPin = managerPin.trim();
 
     if (!cleanBusiness) {
       setError('দোকান বা বেকারির নাম লিখুন');
-      setLoading(false);
-      return;
-    }
-
-    if (!cleanPin || cleanPin.length < 4 || cleanPin.length > 6 || !/^\d+$/.test(cleanPin)) {
-      setError('ম্যানেজার পিন ৪ থেকে ৬ ডিজিটের সংখ্যা হতে হবে');
       setLoading(false);
       return;
     }
@@ -143,7 +133,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     }
 
     try {
-      // 2. Validate Supabase Auth signup result
+      // 2. Validate Supabase Auth signup result with default manager PIN 654321
       const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
@@ -151,13 +141,17 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           data: {
             business_name: cleanBusiness,
             owner_name: cleanOwner || cleanBusiness,
-            manager_pin: cleanPin
+            manager_pin: '654321'
           }
         }
       });
 
       if (signUpErr) {
-        setError(signUpErr.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
+        if (signUpErr.status === 429 || signUpErr.message?.toLowerCase().includes('rate limit')) {
+          setError('ইমেইল পাঠানোর লিমিট অতিক্রম করেছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন অথবা Supabase ড্যাশবোর্ডে "Confirm email" অপশনটি বন্ধ করুন।');
+        } else {
+          setError(signUpErr.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
+        }
         setLoading(false);
         return;
       }
@@ -180,7 +174,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       // Do not create duplicate profile manually or save to localStorage.
       setBusinessName('');
       setOwnerName('');
-      setManagerPin('');
       setPassword('');
       setIsRegister(false);
       setSuccess('রেজিস্ট্রেশন সফল হয়েছে! এখন পাসওয়ার্ড দিয়ে লগইন করুন।');
@@ -210,14 +203,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           <p className="text-slate-400 text-xs font-medium mt-1">
             {isRegister ? 'নতুন বেকারি একাউন্ট তৈরি করুন' : 'আপনার বেকারি একাউন্টে লগইন করুন'}
           </p>
-
-          {/* Supabase Connection Status Notice */}
-          <div className="mt-3 flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold bg-[#071526] border border-[#162744] text-slate-300">
-            <Database size={13} className={isSupabaseConfigured ? "text-emerald-400" : "text-amber-400"} />
-            <span>
-              {isSupabaseConfigured ? "Supabase Connected" : "Supabase: Migration Ready (Env variables pending)"}
-            </span>
-          </div>
         </div>
 
         {/* Card */}
@@ -233,7 +218,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 setPassword(''); 
                 setBusinessName(''); 
                 setOwnerName(''); 
-                setManagerPin('');
                 setError(''); 
                 setSuccess(''); 
               }} 
@@ -255,7 +239,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 setPassword(''); 
                 setBusinessName(''); 
                 setOwnerName(''); 
-                setManagerPin('');
                 setError(''); 
                 setSuccess(''); 
               }} 
@@ -371,37 +354,19 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#00d2ff] flex items-center gap-1.5">
-                    <Lock size={13} /> পাসওয়ার্ড (Password)
-                  </label>
-                  <input 
-                    required 
-                    type="password" 
-                    minLength={8}
-                    placeholder="কমপক্ষে ৮ ডিজিট"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050b14] border border-[#162a45] focus:border-[#00d2ff] text-white outline-none text-xs sm:text-sm tracking-wider" 
-                    value={password} 
-                    onChange={e => setPassword(e.target.value)} 
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#00d2ff] flex items-center gap-1.5">
-                    <ShieldCheck size={13} /> ম্যানেজার পিন (PIN)
-                  </label>
-                  <input 
-                    required 
-                    type="password" 
-                    maxLength={6}
-                    minLength={4}
-                    placeholder="৪-৬ ডিজিট"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050b14] border border-[#162a45] focus:border-[#00d2ff] text-white outline-none text-xs sm:text-sm tracking-widest text-center" 
-                    value={managerPin} 
-                    onChange={e => setManagerPin(e.target.value)} 
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-[#00d2ff] flex items-center gap-1.5">
+                  <Lock size={13} /> পাসওয়ার্ড (Password)
+                </label>
+                <input 
+                  required 
+                  type="password" 
+                  minLength={8}
+                  placeholder="কমপক্ষে ৮ ডিজিট"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050b14] border border-[#162a45] focus:border-[#00d2ff] text-white outline-none text-xs sm:text-sm tracking-wider" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                />
               </div>
 
               <button 

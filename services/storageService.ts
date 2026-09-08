@@ -323,7 +323,7 @@ export const storageService = {
     const cleanEmail = email.trim().toLowerCase();
     const profile = this.getProfileByEmail(cleanEmail);
     if (profile && profile.managerPin) return profile.managerPin;
-    return '';
+    return '654321';
   },
 
   async setManagerPin(email: string, newPin: string): Promise<void> {
@@ -1922,7 +1922,7 @@ export const storageService = {
           owner_name: localProfile.ownerName || null,
           phone: localProfile.phone || null,
           address: localProfile.address || null,
-          manager_pin: localProfile.managerPin || '1234',
+          manager_pin: localProfile.managerPin || '654321',
           currency_symbol: localProfile.currencySymbol || '৳',
           receipt_footer: localProfile.receiptFooter || 'Thank you for shopping with us!',
           role: localProfile.role || 'owner',

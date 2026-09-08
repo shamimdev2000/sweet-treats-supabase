@@ -798,6 +798,17 @@ const App: React.FC = () => {
     { id: View.MANAGER, label: 'Manager Profile', icon: <UserCheck size={19} /> },
   ];
 
+  // Close mobile menu on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const isAdminViewActive = adminNavItems.some(item => item.id === currentView);
   const totalAdminNotification = adminNavItems.reduce((acc, item) => acc + (item.notification || 0), 0);
 
@@ -814,35 +825,38 @@ const App: React.FC = () => {
     <div className={`min-h-screen flex bg-slate-50 dark:bg-dark-bg text-slate-900 dark:text-white transition-all ${isMobileMenuOpen || currentView === View.SALES ? 'overflow-hidden' : ''} ${currentView === View.SALES ? 'h-screen' : ''}`}>
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[80]" 
+          className="fixed inset-0 bg-slate-900/80 dark:bg-black/80 backdrop-blur-sm z-[80] transition-opacity duration-300 animate-in fade-in cursor-pointer" 
           onClick={() => setIsMobileMenuOpen(false)} 
         />
       )}
       
       {/* Sidebar: In Sales/POS view, sidebar is hidden by default and acts as an overlay drawer when MENU is clicked */}
-      <aside className={`w-72 bg-white dark:bg-[#070d19] border-r border-slate-200 dark:border-[#162744] flex flex-col fixed h-full z-[90] transition-transform duration-300 ${
+      <aside className={`w-[280px] sm:w-72 max-w-[85vw] bg-white dark:bg-[#070d19] border-r border-slate-200 dark:border-[#162744] flex flex-col fixed inset-y-0 left-0 h-full z-[90] shadow-2xl lg:shadow-none transition-transform duration-300 ease-in-out overscroll-contain ${
         currentView === View.SALES
-          ? (isMobileMenuOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.8)]' : '-translate-x-full')
-          : (isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0')
+          ? (isMobileMenuOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.85)]' : '-translate-x-full')
+          : (isMobileMenuOpen ? 'translate-x-0 shadow-[0_0_50px_rgba(0,0,0,0.85)]' : '-translate-x-full lg:translate-x-0')
       }`}>
-        <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-[#162744]/60">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-[#0a1527] border border-[#00d2ff]/40 rounded-2xl flex items-center justify-center shadow-[0_0_15px_rgba(0,210,255,0.3)]">
-              <UtensilsCrossed size={22} className="text-[#00e5ff]" />
+        <div className="p-4 sm:p-6 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-[#162744]/60 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 bg-[#0a1527] border border-[#00d2ff]/40 rounded-2xl flex items-center justify-center shadow-[0_0_15px_rgba(0,210,255,0.3)] shrink-0">
+              <UtensilsCrossed size={20} className="text-[#00e5ff]" />
             </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-900 dark:text-white leading-none">
-                {userProfile?.businessName ? userProfile.businessName.split(' ')[0] : 'Bakery'}
-              </h1>
-              <h1 className="text-lg font-black text-[#00e5ff] leading-tight">
-                {userProfile?.businessName ? userProfile.businessName.split(' ').slice(1).join(' ') || 'Store' : 'Manager'}
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate tracking-tight">
+                {userProfile?.businessName || 'Sweet Bakery'}
               </h1>
             </div>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400 hover:text-white p-2 cursor-pointer transition-colors"><X size={24} /></button>
+          <button 
+            onClick={() => setIsMobileMenuOpen(false)} 
+            className={`${currentView === View.SALES ? '' : 'lg:hidden'} p-2 rounded-xl bg-slate-100 dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] text-slate-400 hover:text-white transition-colors cursor-pointer active:scale-95 shrink-0`}
+            aria-label="Close sidebar"
+          >
+            <X size={20} />
+          </button>
         </div>
         
-        <nav className="flex-1 px-4 mt-4 space-y-2 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-3 sm:px-4 mt-3 sm:mt-4 space-y-2 overflow-y-auto custom-scrollbar touch-pan-y">
           {/* Admin Panel Collapsible Section (Placed at the very top) */}
           <div className="pb-2">
             <button
@@ -1010,32 +1024,52 @@ const App: React.FC = () => {
         )}
         
         {currentView !== View.SALES && (
-          <header className="px-6 py-4 bg-white/80 dark:bg-[#050b14]/80 backdrop-blur-xl sticky top-0 z-40 flex justify-between items-center border-b border-slate-200 dark:border-[#162744]">
-            <div className="flex items-center gap-4">
-              <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-2 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-xl shadow-sm"><Menu size={22} className="text-[#00e5ff]" /></button>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#00e5ff] shadow-[0_0_8px_#00e5ff]"></span>
-                <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">{currentView.replace('_', ' ')}</h2>
+          <header className="px-3.5 sm:px-6 py-3 sm:py-4 bg-white/80 dark:bg-[#050b14]/90 backdrop-blur-xl sticky top-0 z-40 flex justify-between items-center border-b border-slate-200 dark:border-[#162744]">
+            <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+              <button 
+                onClick={() => setIsMobileMenuOpen(true)} 
+                className="lg:hidden p-2 sm:p-2.5 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-xl shadow-sm active:scale-95 cursor-pointer shrink-0"
+                title="Open Navigation Menu"
+              >
+                <Menu size={20} className="text-[#00e5ff]" />
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-[#00e5ff] shadow-[0_0_8px_#00e5ff] shrink-0"></span>
+                <h2 className="text-base sm:text-xl md:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white truncate">
+                  {currentView.replace('_', ' ')}
+                </h2>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="p-3 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-2xl text-[#00e5ff] shadow-sm transition-all active:scale-95 cursor-pointer">{theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}</button>
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+              <button 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
+                className="p-2 sm:p-3 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-xl sm:rounded-2xl text-[#00e5ff] shadow-sm transition-all active:scale-95 cursor-pointer"
+                title="Toggle Theme"
+              >
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
               {isManagerAuthenticated && (
                 <button 
                   onClick={() => handleLockAdmin()} 
-                  className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 font-bold text-xs shadow-sm hover:bg-amber-500/20 transition-all active:scale-95 cursor-pointer uppercase tracking-wider"
+                  className="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl sm:rounded-2xl text-amber-400 font-bold text-xs shadow-sm hover:bg-amber-500/20 transition-all active:scale-95 cursor-pointer uppercase tracking-wider"
                   title="Lock Admin Panel"
                 >
-                  <Lock size={16} />
-                  <span>Lock Admin</span>
+                  <Lock size={15} />
+                  <span className="hidden sm:inline">Lock Admin</span>
                 </button>
               )}
-              <button onClick={handleLogout} className="p-3 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-2xl text-red-400 shadow-sm hover:bg-red-50 dark:hover:bg-red-500/10 transition-all active:scale-95 cursor-pointer" title="Logout"><LogOut size={20} /></button>
+              <button 
+                onClick={handleLogout} 
+                className="p-2 sm:p-3 bg-white dark:bg-[#0e1a2f] border border-slate-200 dark:border-[#162744] rounded-xl sm:rounded-2xl text-red-400 shadow-sm hover:bg-red-50 dark:hover:bg-red-500/10 transition-all active:scale-95 cursor-pointer" 
+                title="Logout"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </header>
         )}
 
-        <div className={`${currentView === View.SALES ? 'p-2.5 sm:p-3.5 h-full overflow-hidden flex flex-col' : 'p-4 md:p-6 flex-1'}`}>
+        <div className={`${currentView === View.SALES ? 'p-2 sm:p-3.5 h-full overflow-hidden flex flex-col' : 'p-3 sm:p-5 md:p-6 pb-24 lg:pb-6 flex-1'}`}>
           {!isDataLoaded ? (
             <div className="flex flex-col items-center justify-center h-[60vh]"><div className="w-12 h-12 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin"></div><p className="mt-6 font-black text-slate-400 animate-pulse uppercase text-xs tracking-[0.3em]">Loading Bakery Data...</p></div>
           ) : (
@@ -1103,6 +1137,87 @@ const App: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Mobile Bottom Navigation Bar (Shown on mobile screens for quick navigation across core views) */}
+        {currentView !== View.SALES && (
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#070d19]/95 dark:bg-[#070d19]/95 backdrop-blur-xl border-t border-slate-200 dark:border-[#162744] px-2 py-1.5 flex items-center justify-around shadow-[0_-5px_25px_rgba(0,0,0,0.5)]">
+            <button
+              onClick={() => handleViewChange(View.SALES)}
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentView === View.SALES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${currentView === View.SALES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+                <ShoppingCart size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">POS Sale</span>
+            </button>
+
+            <button
+              onClick={() => handleViewChange(View.INVENTORY)}
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentView === View.INVENTORY ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${currentView === View.INVENTORY ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+                <Package size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">Stock</span>
+            </button>
+
+            <button
+              onClick={() => handleViewChange(View.DUES)}
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
+                currentView === View.DUES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${currentView === View.DUES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+                <Wallet size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">Dues</span>
+              {sales.filter(s => s.dueAmount > 0).length > 0 && (
+                <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleViewChange(View.NOTES)}
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
+                currentView === View.NOTES ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${currentView === View.NOTES ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+                <StickyNote size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">Notes</span>
+              {notes.filter(n => n.status === 'active' && n.priority === 'urgent').length > 0 && (
+                <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleViewChange(View.DASHBOARD)}
+              className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentView === View.DASHBOARD ? 'text-[#00e5ff] font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg ${currentView === View.DASHBOARD ? 'bg-[#00e5ff]/20 shadow-[0_0_10px_#00e5ff]' : ''}`}>
+                <LayoutDashboard size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
+            >
+              <div className="p-1.5 rounded-lg bg-[#0c182b] text-[#00d2ff]">
+                <Menu size={18} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5 font-bold">More</span>
+            </button>
+          </nav>
+        )}
 
         {/* Manager Lock Modal */}
         {showLockModal && (

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     owner_name TEXT,
     phone TEXT,
     address TEXT,
-    manager_pin TEXT NOT NULL DEFAULT '1234',
+    manager_pin TEXT NOT NULL DEFAULT '654321',
     currency_symbol TEXT DEFAULT '৳',
     receipt_footer TEXT DEFAULT 'Thank you for shopping with us!',
     branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
@@ -318,7 +318,7 @@ BEGIN
     -- 1. Parse metadata with safe valid fallbacks (guarantees 4-6 digit numeric PIN)
     v_pin := NULLIF(TRIM(NEW.raw_user_meta_data->>'manager_pin'), '');
     IF v_pin IS NULL OR NOT (v_pin ~ '^[0-9]{4,6}$') THEN
-        v_pin := '1234';
+        v_pin := '654321';
     END IF;
 
     v_business := COALESCE(NULLIF(TRIM(NEW.raw_user_meta_data->>'business_name'), ''), 'Bakery Store');

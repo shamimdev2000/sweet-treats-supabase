@@ -362,37 +362,37 @@ const MonthlyClosingView: React.FC<Props> = ({
             </div>
           </div>
           
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[650px] text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-[#0a1527]/50 border-b border-slate-100 dark:border-[#162744]">
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Month</th>
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Sales</th>
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-rose-400">Expenses</th>
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-amber-400">Wastage</th>
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-emerald-400">Net Profit</th>
-                  <th className="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Actions</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Month</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Sales</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-rose-400">Expenses</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-amber-400">Wastage</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-emerald-400">Net Profit</th>
+                  <th className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#162744]">
                 {[...monthlyClosings].reverse().map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-[#0a1527]/50 transition-colors text-sm">
-                    <td className="px-8 py-4">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-black text-slate-900 dark:text-white">{c.month}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase">By {c.closedBy}</span>
                       </div>
                     </td>
-                    <td className="px-8 py-4">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-300">৳{(c.totalSales || 0).toLocaleString()}</span>
                     </td>
-                    <td className="px-8 py-4">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">
                       <span className="text-sm font-bold text-rose-400">৳{(c.totalExpenses || 0).toLocaleString()}</span>
                     </td>
-                    <td className="px-8 py-4">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">
                       <span className="text-sm font-bold text-amber-400">৳{(c.totalWastage || 0).toLocaleString()}</span>
                     </td>
-                    <td className="px-8 py-4">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-black ${c.totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           ৳{(c.totalProfit || 0).toLocaleString()}
@@ -400,7 +400,7 @@ const MonthlyClosingView: React.FC<Props> = ({
                         {c.totalProfit >= 0 ? <TrendingUp size={14} className="text-emerald-400" /> : <TrendingDown size={14} className="text-rose-400" />}
                       </div>
                     </td>
-                    <td className="px-8 py-4 text-right">
+                    <td className="px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 text-right">
                       <div className="flex justify-end gap-1.5">
                         <button 
                           onClick={() => setActivePrintRecord(c)} 

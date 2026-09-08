@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Sparkles,
   ArrowRight,
+  ArrowLeft,
   Receipt,
   Boxes,
   Layers,
@@ -62,6 +63,7 @@ const SalesView: React.FC<Props> = ({
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [mobilePosTab, setMobilePosTab] = useState<'catalog' | 'cart'>('catalog');
   
   // Cart & Checkout states
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -478,11 +480,38 @@ const SalesView: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Mobile Tab Switcher (Visible only on screens < lg) */}
+      <div className="lg:hidden flex items-center bg-[#050b14] p-1 rounded-2xl border border-[#162744] shrink-0 gap-1">
+        <button
+          onClick={() => setMobilePosTab('catalog')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobilePosTab === 'catalog'
+              ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Boxes size={14} />
+          <span>পণ্য ({filteredProducts.length})</span>
+        </button>
+        <button
+          onClick={() => setMobilePosTab('cart')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            mobilePosTab === 'cart'
+              ? 'bg-[#00e5ff] text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <ShoppingCart size={14} />
+          <span>কার্ট ({totalCartCount})</span>
+          {totalBill > 0 && <span className="ml-1 text-[11px] font-black text-amber-300">৳{totalBill.toLocaleString()}</span>}
+        </button>
+      </div>
+
       {/* Main 2-Column POS Layout (Full viewport height, 0 outer scroll) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
         
         {/* Left Section: Search, Direct Dropdown, Category Pills & Product Catalog Grid */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col h-full overflow-hidden space-y-2 sm:space-y-2.5">
+        <div className={`lg:col-span-7 xl:col-span-8 flex-col h-full overflow-hidden space-y-2 sm:space-y-2.5 ${mobilePosTab === 'catalog' ? 'flex' : 'hidden lg:flex'}`}>
           
           {/* Search + Direct Select Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
@@ -664,15 +693,44 @@ const SalesView: React.FC<Props> = ({
               </div>
             )}
           </div>
+
+          {/* Floating Mobile Checkout Bar when items exist in Cart */}
+          {totalCartCount > 0 && (
+            <div className="lg:hidden shrink-0 p-2.5 bg-[#071324] border border-[#00d2ff]/40 rounded-2xl flex items-center justify-between shadow-[0_0_20px_rgba(0,210,255,0.25)] animate-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 pl-1">
+                <div className="w-8 h-8 rounded-xl bg-[#00e5ff] text-black flex items-center justify-center font-black text-xs shadow-[0_0_10px_#00e5ff]">
+                  {totalCartCount}
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">মোট বিল</div>
+                  <div className="text-sm font-black text-[#00e5ff]">৳{totalBill.toLocaleString()}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setMobilePosTab('cart')}
+                className="smart-cyan-pill px-4 py-2.5 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(0,229,255,0.4)]"
+              >
+                <span>বিল ও পেমেন্ট</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right Section: Active Sale / Cart Panel (Matching screenshot exactly, perfectly fitted) */}
-        <div className="lg:col-span-5 xl:col-span-4 bg-[#050b14] border border-[#162744] rounded-3xl p-3.5 sm:p-4 flex flex-col h-full overflow-hidden justify-between shadow-[0_10px_35px_rgba(0,0,0,0.6)]">
+        <div className={`lg:col-span-5 xl:col-span-4 bg-[#050b14] border border-[#162744] rounded-3xl p-3.5 sm:p-4 flex-col h-full overflow-hidden justify-between shadow-[0_10px_35px_rgba(0,0,0,0.6)] ${mobilePosTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
           
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {/* Header: ACTIVE SALE + Badge */}
             <div className="flex items-center justify-between pb-2.5 border-b border-[#162744] shrink-0">
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMobilePosTab('catalog')}
+                  className="lg:hidden p-1.5 bg-[#071324] hover:bg-[#0c1e38] border border-[#162744] rounded-xl text-[#00e5ff] transition-all cursor-pointer mr-1"
+                  title="Back to products"
+                >
+                  <ArrowLeft size={16} />
+                </button>
                 <ShoppingCart size={18} className="text-[#00e5ff]" />
                 <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white">
                   ACTIVE SALE
@@ -682,14 +740,24 @@ const SalesView: React.FC<Props> = ({
                 </span>
               </div>
 
-              {cart.length > 0 && (
-                <button 
-                  onClick={handleClearCart}
-                  className="text-xs font-bold text-red-400 hover:text-red-300 hover:underline cursor-pointer"
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMobilePosTab('catalog')}
+                  className="lg:hidden text-xs font-bold text-[#00e5ff] hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  Clear Cart
+                  <Plus size={13} />
+                  <span>পণ্য যোগ</span>
                 </button>
-              )}
+
+                {cart.length > 0 && (
+                  <button 
+                    onClick={handleClearCart}
+                    className="text-xs font-bold text-red-400 hover:text-red-300 hover:underline cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Critical & Low-Stock Visual Alert Banner for Selected Items */}
