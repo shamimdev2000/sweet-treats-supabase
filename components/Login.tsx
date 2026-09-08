@@ -14,8 +14,6 @@ import {
   Database
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
-import { UserProfile } from '../types';
-import { generateId } from '../services/idGenerator';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface Props {
@@ -137,95 +135,58 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       return;
     }
 
+    // 1. Supabase must be the single source of truth for registration
+    if (!isSupabaseConfigured || !supabase) {
+      setError('Supabase ডাটাবেজ সংযোগ পাওয়া যায়নি। অনুগ্রহ করে পরিবেশ ভেরিয়েবল পরীক্ষা করুন।');
+      setLoading(false);
+      return;
+    }
+
     try {
-      if (isSupabaseConfigured && supabase) {
-        // Register through Supabase Auth
-        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: password,
-          options: {
-            data: {
-              business_name: cleanBusiness,
-              owner_name: cleanOwner || cleanBusiness,
-              manager_pin: cleanPin
-            }
-          }
-        });
-
-        if (signUpErr) {
-          setError(signUpErr.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
-          setLoading(false);
-          return;
-        }
-
-        const newProfile: UserProfile = {
-          id: signUpData.user?.id || generateId('usr'),
-          email: cleanEmail,
-          username: cleanEmail.split('@')[0] || 'bakery',
-          businessName: cleanBusiness,
-          ownerName: cleanOwner || cleanBusiness,
-          managerPin: cleanPin,
-          currencySymbol: '৳',
-          receiptFooter: `Thank you for shopping at ${cleanBusiness}!`,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
-        };
-
-        try {
-          await storageService.saveProfile(newProfile);
-          await storageService.setManagerPin(cleanEmail, cleanPin);
-        } catch (e) {
-          console.warn("Profile save warning:", e);
-        }
-
-        setBusinessName('');
-        setOwnerName('');
-        setManagerPin('');
-        setPassword('');
-        setIsRegister(false);
-        setSuccess('রেজিস্ট্রেশন সফল হয়েছে! এখন পাসওয়ার্ড দিয়ে লগইন করুন।');
-        setLoading(false);
-        return;
-      }
-
-      // Local Registration (when Supabase credentials are pending)
-      const profiles = storageService.getProfiles();
-      if (profiles.some(p => p.email.toLowerCase() === cleanEmail)) {
-        setError('এই ইমেইল দিয়ে আগেই একাউন্ট খোলা হয়েছে। লগইন করুন।');
-        setLoading(false);
-        return;
-      }
-
-      const newProfile: UserProfile = {
-        id: generateId('usr'),
+      // 2. Validate Supabase Auth signup result
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
         email: cleanEmail,
-        username: cleanEmail.split('@')[0] || 'bakery',
-        businessName: cleanBusiness,
-        ownerName: cleanOwner || cleanBusiness,
         password: password,
-        managerPin: cleanPin,
-        currencySymbol: '৳',
-        receiptFooter: `Thank you for shopping at ${cleanBusiness}!`,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
+        options: {
+          data: {
+            business_name: cleanBusiness,
+            owner_name: cleanOwner || cleanBusiness,
+            manager_pin: cleanPin
+          }
+        }
+      });
 
-      try {
-        await storageService.saveProfile(newProfile);
-        await storageService.setManagerPin(cleanEmail, cleanPin);
-      } catch (e) {
-        console.warn("Profile save warning:", e);
+      if (signUpErr) {
+        setError(signUpErr.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
+        setLoading(false);
+        return;
       }
 
+      if (!signUpData.user?.id) {
+        setError('রেজিস্ট্রেশন সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+        setLoading(false);
+        return;
+      }
+
+      // 3. Do NOT treat duplicate/identity-less signup as a successful new registration
+      if (Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        setError('এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।');
+        setLoading(false);
+        return;
+      }
+
+      // 4, 5, 6. Authoritative registration flow: Supabase Auth signup fires database trigger
+      // handle_new_user() which creates public.profiles, public.branches, and public.branch_memberships.
+      // Do not create duplicate profile manually or save to localStorage.
       setBusinessName('');
       setOwnerName('');
       setManagerPin('');
       setPassword('');
       setIsRegister(false);
-      setSuccess('রেজিস্ট্রেশন সফল হয়েছে! পাসওয়ার্ড দিয়ে লগইন করুন।');
+      setSuccess('রেজিস্ট্রেশন সফল হয়েছে! এখন পাসওয়ার্ড দিয়ে লগইন করুন।');
       setLoading(false);
     } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+      setError(err.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
       setLoading(false);
     }
   };

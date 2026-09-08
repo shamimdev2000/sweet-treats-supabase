@@ -96,24 +96,24 @@ const ManagerView: React.FC<Props> = ({
 
   const handleTestConnection = async () => {
     setIsTestingConn(true);
-    const toastId = toast.loading("Testing Supabase products & profiles tables...");
+    const toastId = toast.loading("Running full CRUD diagnostics against live Supabase database...");
     try {
       if (!isSupabaseConfigured || !supabase) {
         toast.error("Supabase client is not configured.", { id: toastId });
         return;
       }
-      const { data, error } = await supabase.from('products').select('id').limit(1);
-      if (error) {
-        if (error.code === 'PGRST205' || error.message.includes('schema cache')) {
-          toast.error("Tables not found in Supabase schema cache yet. Please run setup_schema.sql in Supabase SQL Editor, then click 'Reload Schema Cache' in Supabase Settings -> API.", { id: toastId, duration: 8000 });
-        } else {
-          toast.error(`Database error: ${error.message} (${error.code})`, { id: toastId, duration: 6000 });
-        }
+      const res = await storageService.testDatabaseOperations(username);
+      if (res.success) {
+        toast.success("✅ Supabase Verified: SELECT, INSERT, UPDATE, DELETE all working on public.products!", { id: toastId, duration: 6000 });
       } else {
-        toast.success("Connection healthy! Products table is active in Supabase cloud.", { id: toastId });
+        if (res.error?.code === 'PGRST205' || res.details?.includes('schema cache') || res.details?.includes('Could not find the table')) {
+          toast.error("Table public.products not found in schema cache. Run setup_schema.sql in Supabase SQL Editor and reload schema cache.", { id: toastId, duration: 8000 });
+        } else {
+          toast.error(`❌ Diagnostic failed at [${res.step}]: ${res.details}`, { id: toastId, duration: 7000 });
+        }
       }
     } catch (e: any) {
-      toast.error(`Test failed: ${e.message}`, { id: toastId });
+      toast.error(`Diagnostic failed: ${e.message}`, { id: toastId });
     } finally {
       setIsTestingConn(false);
     }

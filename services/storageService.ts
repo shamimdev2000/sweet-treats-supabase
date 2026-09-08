@@ -24,10 +24,12 @@ const STORAGE_KEYS = {
   STAFF: 'sweetBakery_staff',
   ATTENDANCE: 'sweetBakery_attendance',
   CLOSINGS: 'sweetBakery_daily_closings',
+  DAILY_CLOSINGS: 'sweetBakery_daily_closings',
   DEDUCTIONS: 'sweetBakery_deductions',
   MONTHLY_CLOSINGS: 'sweetBakery_monthly_closings',
   PRODUCTION: 'sweetBakery_production',
   NOTES: 'sweetBakery_daily_notes',
+  DAILY_NOTES: 'sweetBakery_daily_notes',
   PROFILE: 'sweetBakery_business_profile'
 };
 
@@ -42,35 +44,57 @@ export const getStorageKey = (keyVal: string, email: string): string => {
   return `sweetBakery_${cleanEmail}_${baseKey}`;
 };
 
-const getFromLocal = <T>(keyVal: string, email: string): T[] => {
-  if (typeof window === 'undefined') return [];
+// In-memory profiles cache initialized from localStorage for fast synchronous access
+let inMemoryProfiles: UserProfile[] = (() => {
   try {
-    const fullKey = getStorageKey(keyVal, email);
-    const data = localStorage.getItem(fullKey);
-    return data ? JSON.parse(data) : [];
-  } catch (err) {
-    console.error(`localStorage read failed for ${keyVal}:`, err);
+    const saved = localStorage.getItem(PROFILES_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+})();
+
+export const DEFAULT_INITIAL_PRODUCTS: Product[] = [
+  { id: 'prod_white_bread', name: 'Milk White Bread', category: 'Bread', price: 60, stock: 35, unit: 'pcs', barcode: '8901001' },
+  { id: 'prod_brown_bread', name: 'Whole Wheat Brown Bread', category: 'Bread', price: 75, stock: 25, unit: 'pcs', barcode: '8901002' },
+  { id: 'prod_croissant', name: 'Butter Croissant', category: 'Bread', price: 90, stock: 20, unit: 'pcs', barcode: '8901003' },
+  { id: 'prod_choco_cake', name: 'Chocolate Fudge Cake 500g', category: 'Cake', price: 450, stock: 12, unit: 'pcs', barcode: '8901004' },
+  { id: 'prod_vanilla_pastry', name: 'Vanilla Cream Pastry', category: 'Cake', price: 80, stock: 30, unit: 'pcs', barcode: '8901005' },
+  { id: 'prod_red_velvet', name: 'Red Velvet Slice', category: 'Cake', price: 120, stock: 15, unit: 'pcs', barcode: '8901006' },
+  { id: 'prod_cookies', name: 'Almond Butter Cookies 250g', category: 'Snacks', price: 150, stock: 18, unit: 'pkt', barcode: '8901007' },
+  { id: 'prod_donut', name: 'Glazed Chocolate Donut', category: 'Snacks', price: 70, stock: 25, unit: 'pcs', barcode: '8901008' },
+  { id: 'prod_bun', name: 'Sweet Coconut Bun', category: 'Bread', price: 40, stock: 40, unit: 'pcs', barcode: '8901009' },
+  { id: 'prod_muffin', name: 'Blueberry Streusel Muffin', category: 'Snacks', price: 85, stock: 20, unit: 'pcs', barcode: '8901010' }
+];
+
+const getFromLocal = <T>(keyVal: string, email: string): T[] => {
+  try {
+    const key = getStorageKey(keyVal, email);
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    return JSON.parse(raw) as T[];
+  } catch (e) {
+    console.warn(`Error reading local storage key ${keyVal}:`, e);
     return [];
   }
 };
 
 const saveToLocal = <T>(keyVal: string, data: T[], email: string): void => {
-  if (typeof window === 'undefined') return;
   try {
-    const fullKey = getStorageKey(keyVal, email);
-    localStorage.setItem(fullKey, JSON.stringify(data));
-  } catch (err) {
-    console.error(`localStorage write failed for ${keyVal}:`, err);
+    const key = getStorageKey(keyVal, email);
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn(`Error saving local storage key ${keyVal}:`, e);
   }
 };
 
 /**
- * Retrieves the authenticated user session ID when writing to Supabase.
- * Returns string or null if unauthenticated or offline.
+ * Retrieves the user session ID or deterministic ID when writing to Supabase.
+ * Ensures data operations always have a valid tenant identifier.
  */
-export async function requireAuthUserId(): Promise<string | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
-  const userId = await getActiveUserId();
+export async function requireAuthUserId(email?: string): Promise<string | null> {
+  if (!isSupabaseConfigured || !supabase) return email ? getActiveUserId(email) : null;
+  const userId = await getActiveUserId(email);
   return userId;
 }
 
@@ -83,7 +107,7 @@ export async function requireAuthUserId(): Promise<string | null> {
 export async function getActiveBranchId(email?: string): Promise<string | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   try {
-    const userId = await getActiveUserId();
+    const userId = await getActiveUserId(email);
     if (!userId) return null;
 
     // 1. Query profiles.branch_id from Supabase (authoritative source)
@@ -111,10 +135,6 @@ export async function getActiveBranchId(email?: string): Promise<string | null> 
       if (cached?.branchId) return cached.branchId;
     }
 
-    // 4. Fallback: provision or resolve default branch via hardened SECURITY DEFINER function
-    const { data: defaultBranchId } = await supabase.rpc('ensure_default_branch', email ? { p_user_email: email } : {});
-    if (defaultBranchId) return defaultBranchId;
-
     return null;
   } catch (err) {
     console.error("Error resolving active branch:", err);
@@ -127,28 +147,17 @@ export const storageService = {
   // PROFILES MANAGEMENT
   // --------------------------------------------------------------------------
   getProfiles(): UserProfile[] {
-    try {
-      const data = localStorage.getItem(PROFILES_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      console.error("Error reading profiles:", e);
-      return [];
-    }
+    return inMemoryProfiles;
   },
 
   saveProfiles(profiles: UserProfile[]): void {
-    try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-    } catch (e) {
-      console.error("Error saving profiles:", e);
-    }
+    inMemoryProfiles = profiles;
   },
 
   getProfileByEmail(email: string): UserProfile | null {
     if (!email) return null;
     const cleanEmail = email.trim().toLowerCase();
-    const profiles = this.getProfiles();
-    return profiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
+    return inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
   },
 
   async fetchRemoteProfile(userId: string): Promise<UserProfile | null> {
@@ -192,21 +201,12 @@ export const storageService = {
         lastLogin: data.last_login || undefined
       };
 
-      const profiles = this.getProfiles();
       const cleanEmail = profile.email.trim().toLowerCase();
-      const index = profiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
+      const index = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
       if (index > -1) {
-        profiles[index] = { ...profiles[index], ...profile };
+        inMemoryProfiles[index] = { ...inMemoryProfiles[index], ...profile };
       } else {
-        profiles.push(profile);
-      }
-      this.saveProfiles(profiles);
-
-      const fullKey = getStorageKey(STORAGE_KEYS.PROFILE, cleanEmail);
-      try {
-        localStorage.setItem(fullKey, JSON.stringify(profile));
-      } catch (e) {
-        console.error("Failed to cache scoped profile:", e);
+        inMemoryProfiles.push(profile);
       }
 
       return profile;
@@ -219,7 +219,10 @@ export const storageService = {
   async saveProfile(profile: UserProfile): Promise<void> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const userId = await requireAuthUserId();
+        let userId = await requireAuthUserId();
+        if (!userId && profile.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id)) {
+          userId = profile.id;
+        }
         if (userId) {
           // SECURITY: Role is never settable by client upsert. Role is managed by DB triggers/policies.
           const payload: any = {
@@ -241,32 +244,30 @@ export const storageService = {
           const { error } = await supabase.from('profiles').upsert(payload);
           if (error) {
             if (isPgrstMissingTableError(error)) {
-              console.warn("Supabase profiles table not found in schema cache. Storing profile locally.");
+              console.warn("Supabase profiles table not yet provisioned in schema cache (PGRST205).");
             } else {
-              console.warn("Supabase profile upsert warning:", error.message);
+              console.error("Supabase profile upsert error:", error.message);
+              throw error;
             }
           }
         }
       } catch (err) {
-        console.warn("Cloud saveProfile skipped:", err);
+        console.error("saveProfile error:", err);
+        throw err;
       }
     }
 
-    const profiles = this.getProfiles();
     const cleanEmail = profile.email.trim().toLowerCase();
-    const index = profiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
+    const index = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
     if (index > -1) {
-      profiles[index] = { ...profiles[index], ...profile };
+      inMemoryProfiles[index] = { ...inMemoryProfiles[index], ...profile };
     } else {
-      profiles.push(profile);
+      inMemoryProfiles.push(profile);
     }
-    this.saveProfiles(profiles);
-
-    const fullKey = getStorageKey(STORAGE_KEYS.PROFILE, cleanEmail);
     try {
-      localStorage.setItem(fullKey, JSON.stringify(profile));
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
     } catch (e) {
-      console.error("Failed to save scoped profile:", e);
+      console.warn("Could not persist profiles locally:", e);
     }
   },
 
@@ -290,9 +291,9 @@ export const storageService = {
           const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', userId);
           if (error) {
             if (isPgrstMissingTableError(error)) {
-              console.warn("Supabase profiles table not found in schema cache. Storing updates locally.");
+              console.warn("Supabase profiles table not yet provisioned in schema cache (PGRST205).");
             } else {
-              console.warn("Supabase updateProfile warning:", error.message);
+              console.error("Supabase updateProfile error:", error.message);
             }
           }
         }
@@ -301,48 +302,32 @@ export const storageService = {
       }
     }
 
-    const profiles = this.getProfiles();
-    const index = profiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
-    if (index === -1) return null;
-
-    const updatedProfile = {
-      ...profiles[index],
-      ...updates
-    };
-    profiles[index] = updatedProfile;
-    this.saveProfiles(profiles);
-
-    if (updates.managerPin) {
-      const pinKey = getStorageKey('managerPass', cleanEmail);
-      localStorage.setItem(pinKey, updates.managerPin);
+    const index = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
+    if (index !== -1) {
+      inMemoryProfiles[index] = {
+        ...inMemoryProfiles[index],
+        ...updates
+      };
+      try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+      } catch (e) {
+        console.warn("Could not persist profiles locally:", e);
+      }
+      return inMemoryProfiles[index];
     }
 
-    const fullKey = getStorageKey(STORAGE_KEYS.PROFILE, cleanEmail);
-    try {
-      localStorage.setItem(fullKey, JSON.stringify(updatedProfile));
-    } catch (e) {
-      console.error("Failed to update scoped profile:", e);
-    }
-
-    return updatedProfile;
+    return null;
   },
 
   getManagerPin(email: string): string {
     const cleanEmail = email.trim().toLowerCase();
-    const pinKey = getStorageKey('managerPass', cleanEmail);
-    const savedPin = localStorage.getItem(pinKey);
-    if (savedPin) return savedPin;
-
     const profile = this.getProfileByEmail(cleanEmail);
     if (profile && profile.managerPin) return profile.managerPin;
-
     return '';
   },
 
   async setManagerPin(email: string, newPin: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
-    const pinKey = getStorageKey('managerPass', cleanEmail);
-    localStorage.setItem(pinKey, newPin);
     await this.updateProfile(cleanEmail, { managerPin: newPin });
   },
 
@@ -402,315 +387,354 @@ export const storageService = {
   // PRODUCTS (INVENTORY)
   // --------------------------------------------------------------------------
   async getProducts(email: string): Promise<Product[]> {
-    if (isSupabaseConfigured && supabase) {
-      const userId = await getActiveUserId();
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('products')
-        .select('*')
-        .order('name', { ascending: true });
+    const cleanEmail = email.trim().toLowerCase();
+    const localProducts = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
 
-      if (branchId && userId) {
-        query = query.or(`branch_id.eq.${branchId},and(branch_id.is.null,user_id.eq.${userId})`);
-      } else if (branchId) {
-        query = query.eq('branch_id', branchId);
-      } else if (userId) {
-        query = query.eq('user_id', userId);
-      }
-
-      const { data, error } = await query;
-
-      if (!error && data) {
-        const prods: Product[] = data.map(row => ({
-          id: row.id,
-          name: row.name,
-          category: row.category,
-          price: Number(row.price),
-          stock: Number(row.stock),
-          unit: row.unit,
-          barcode: row.barcode || undefined
-        }));
-        saveToLocal(STORAGE_KEYS.PRODUCTS, prods, email);
-        return prods;
-      }
-    }
-    return getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, email);
-  },
-
-  async upsertProduct(email: string, product: Product) {
     if (isSupabaseConfigured && supabase) {
       try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('products')
+          .select('*')
+          .order('name', { ascending: true });
 
-          // 1. Try to update existing product first (avoids changing branch_id or violating RLS insert permissions)
-          const updatePayload: any = {
-            name: product.name,
-            category: product.category,
-            price: product.price,
-            stock: product.stock,
-            unit: product.unit,
-            barcode: product.barcode || null,
-            updated_at: new Date().toISOString()
-          };
-
-          const { data: updatedRows, error: updateErr } = await supabase
-            .from('products')
-            .update(updatePayload)
-            .eq('id', product.id)
-            .select('id');
-
-          // 2. If row does not exist in DB yet, insert it with user_id and branch_id
-          if (!updateErr && (!updatedRows || updatedRows.length === 0)) {
-            const insertPayload: any = {
-              id: product.id,
-              user_id: userId,
-              name: product.name,
-              category: product.category,
-              price: product.price,
-              stock: product.stock,
-              unit: product.unit,
-              barcode: product.barcode || null,
-              updated_at: new Date().toISOString()
-            };
-            if (branchId) {
-              insertPayload.branch_id = branchId;
-            }
-            const { error: insertErr } = await supabase.from('products').insert(insertPayload);
-            if (insertErr && !isPgrstMissingTableError(insertErr)) {
-              console.warn("Supabase insertProduct warning:", insertErr.message);
-            }
-          } else if (updateErr && !isPgrstMissingTableError(updateErr)) {
-            console.warn("Supabase updateProduct warning:", updateErr.message);
-          }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
         }
-      } catch (err) {
-        console.warn("Cloud product sync skipped:", err);
+
+        const { data, error } = await query;
+
+        if (!error && data && data.length > 0) {
+          const remoteProducts = data.map(row => ({
+            id: row.id,
+            name: row.name,
+            category: row.category,
+            price: Number(row.price),
+            stock: Number(row.stock),
+            unit: row.unit,
+            barcode: row.barcode || undefined
+          }));
+          saveToLocal(STORAGE_KEYS.PRODUCTS, remoteProducts, cleanEmail);
+          return remoteProducts;
+        }
+        if (error && isPgrstMissingTableError(error)) {
+          console.warn("Supabase products table not yet provisioned in schema cache (PGRST205). Serving local cache.");
+        }
+      } catch (e) {
+        console.warn("Error fetching remote products, using local cache:", e);
       }
     }
 
-    const products = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, email);
-    const index = products.findIndex(p => p.id === product.id);
-    if (index > -1) {
-      products[index] = product;
-    } else {
-      products.unshift(product);
+    if (localProducts.length > 0) {
+      return localProducts;
     }
-    saveToLocal(STORAGE_KEYS.PRODUCTS, products, email);
+
+    // Default products on fresh setup
+    saveToLocal(STORAGE_KEYS.PRODUCTS, DEFAULT_INITIAL_PRODUCTS, cleanEmail);
+    return DEFAULT_INITIAL_PRODUCTS;
   },
 
-  async deleteProduct(email: string, id: string) {
+  async upsertProduct(email: string, product: Product): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
+    const idx = current.findIndex(p => p.id === product.id);
+    const updated = idx > -1
+      ? current.map(p => p.id === product.id ? product : p)
+      : [...current, product];
+    saveToLocal(STORAGE_KEYS.PRODUCTS, updated, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('products').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteProduct warning:", error.message);
+        const userId = await requireAuthUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+
+        const payload: any = {
+          id: product.id,
+          user_id: userId,
+          user_email: cleanEmail,
+          name: product.name.trim(),
+          category: product.category.trim(),
+          price: Number(product.price) || 0,
+          stock: Number(product.stock) || 0,
+          unit: product.unit || 'pcs',
+          barcode: product.barcode?.trim() || null,
+          updated_at: new Date().toISOString()
+        };
+        if (branchId) {
+          payload.branch_id = branchId;
+        }
+
+        const { error: upsertErr } = await supabase
+          .from('products')
+          .upsert(payload, { onConflict: 'id' });
+
+        if (upsertErr) {
+          if (isPgrstMissingTableError(upsertErr)) {
+            console.warn("Supabase products table not yet provisioned in schema cache (PGRST205). Product saved locally.");
+            return;
+          } else {
+            console.error('SUPABASE PRODUCT UPSERT ERROR:', upsertErr);
+            throw upsertErr;
           }
         }
-      } catch (err) {
-        console.warn("Cloud deleteProduct skipped:", err);
+      } catch (err: any) {
+        if (isPgrstMissingTableError(err)) {
+          console.warn("Supabase products table not yet provisioned in schema cache. Product saved locally.");
+          return;
+        }
+        throw err;
       }
     }
+  },
 
-    const products = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, email);
-    saveToLocal(STORAGE_KEYS.PRODUCTS, products.filter(p => p.id !== id), email);
+  async deleteProduct(email: string, id: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.PRODUCTS, current.filter(p => p.id !== id), cleanEmail);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error: deleteErr } = await supabase
+          .from('products')
+          .delete()
+          .eq('id', id);
+
+        if (deleteErr) {
+          if (isPgrstMissingTableError(deleteErr)) {
+            console.warn("Supabase products table not yet provisioned in schema cache (PGRST205).");
+          } else {
+            console.error('SUPABASE PRODUCT DELETE ERROR:', deleteErr);
+            throw deleteErr;
+          }
+        }
+      } catch (err: any) {
+        if (isPgrstMissingTableError(err)) return;
+        throw err;
+      }
+    }
   },
 
   // --------------------------------------------------------------------------
   // SALES & DUES
   // --------------------------------------------------------------------------
   async getSales(email: string): Promise<Sale[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const localSales = getFromLocal<Sale>(STORAGE_KEYS.SALES, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('sales')
-        .select(`
-          *,
-          items:sale_items(*),
-          payments:sale_payments(*)
-        `)
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('sales')
+          .select(`
+            *,
+            items:sale_items(*),
+            payments:sale_payments(*)
+          `)
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const sales: Sale[] = data.map(row => ({
-          id: row.id,
-          totalPrice: Number(row.total_price),
-          discount: Number(row.discount || 0),
-          amountPaid: Number(row.amount_paid),
-          dueAmount: Number(row.due_amount),
-          customerName: row.customer_name || undefined,
-          customerPhone: row.customer_phone || undefined,
-          paymentMethod: row.payment_method,
-          mobileProvider: row.mobile_provider || undefined,
-          transactionId: row.transaction_id || undefined,
-          date: row.date,
-          items: (row.items || []).map((item: any) => ({
-            productId: item.product_id,
-            productName: item.product_name,
-            quantity: Number(item.quantity),
-            unit: item.unit,
-            pricePerUnit: Number(item.price_per_unit),
-            subTotal: Number(item.sub_total)
-          })),
-          payments: (row.payments || []).map((pay: any) => ({
-            id: pay.id,
-            amount: Number(pay.amount),
-            date: pay.date,
-            method: pay.method
-          }))
-        }));
-        saveToLocal(STORAGE_KEYS.SALES, sales, email);
-        return sales;
+        if (!error && data) {
+          const remoteSales = data.map(row => ({
+            id: row.id,
+            totalPrice: Number(row.total_price),
+            discount: Number(row.discount || 0),
+            amountPaid: Number(row.amount_paid),
+            dueAmount: Number(row.due_amount),
+            customerName: row.customer_name || undefined,
+            customerPhone: row.customer_phone || undefined,
+            paymentMethod: row.payment_method,
+            mobileProvider: row.mobile_provider || undefined,
+            transactionId: row.transaction_id || undefined,
+            date: row.date,
+            items: (row.items || []).map((item: any) => ({
+              productId: item.product_id,
+              productName: item.product_name,
+              quantity: Number(item.quantity),
+              unit: item.unit,
+              pricePerUnit: Number(item.price_per_unit),
+              subTotal: Number(item.sub_total)
+            })),
+            payments: (row.payments || []).map((pay: any) => ({
+              id: pay.id,
+              amount: Number(pay.amount),
+              date: pay.date,
+              method: pay.method
+            }))
+          }));
+          saveToLocal(STORAGE_KEYS.SALES, remoteSales, cleanEmail);
+          return remoteSales;
+        }
+      } catch (e) {
+        console.warn("Error loading sales from cloud, using local cache:", e);
       }
     }
-    return getFromLocal<Sale>(STORAGE_KEYS.SALES, email);
+    return localSales;
   },
 
   async addSale(email: string, sale: Sale) {
+    const cleanEmail = email.trim().toLowerCase();
+    const currentSales = getFromLocal<Sale>(STORAGE_KEYS.SALES, cleanEmail);
+    const updatedSales = [sale, ...currentSales.filter(s => s.id !== sale.id)];
+    saveToLocal(STORAGE_KEYS.SALES, updatedSales, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          // 1. Insert parent sale with branch scoping
-          const salePayload: any = {
-            id: sale.id,
-            user_id: userId,
-            total_price: sale.totalPrice,
-            discount: sale.discount || 0,
-            amount_paid: sale.amountPaid,
-            due_amount: sale.dueAmount,
-            customer_name: sale.customerName || null,
-            customer_phone: sale.customerPhone || null,
-            payment_method: sale.paymentMethod,
-            mobile_provider: sale.mobileProvider || null,
-            transaction_id: sale.transactionId || null,
-            date: sale.date
-          };
-          if (branchId) {
-            salePayload.branch_id = branchId;
+        const userId = await requireAuthUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        // 1. Insert parent sale with branch scoping
+        const salePayload: any = {
+          id: sale.id,
+          user_id: userId,
+          user_email: cleanEmail,
+          total_price: sale.totalPrice,
+          discount: sale.discount || 0,
+          amount_paid: sale.amountPaid,
+          due_amount: sale.dueAmount,
+          customer_name: sale.customerName || null,
+          customer_phone: sale.customerPhone || null,
+          payment_method: sale.paymentMethod,
+          mobile_provider: sale.mobileProvider || null,
+          transaction_id: sale.transactionId || null,
+          date: sale.date
+        };
+        if (branchId) {
+          salePayload.branch_id = branchId;
+        }
+        const { error: saleErr } = await supabase.from('sales').insert(salePayload);
+        if (saleErr) {
+          if (isPgrstMissingTableError(saleErr)) {
+            console.warn("Supabase sales table not yet provisioned in schema cache (PGRST205). Sale recorded locally.");
+            return;
           }
-          const { error: saleErr } = await supabase.from('sales').insert(salePayload);
+          console.error("Supabase addSale error:", saleErr);
+          return;
+        }
 
-          if (!saleErr && sale.items.length > 0) {
-            const itemsPayload = sale.items.map(item => ({
-              sale_id: sale.id,
-              product_id: item.productId,
-              product_name: item.productName,
-              quantity: item.quantity,
-              unit: item.unit,
-              price_per_unit: item.pricePerUnit,
-              sub_total: item.subTotal
-            }));
-            const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
-            if (itemsErr && !isPgrstMissingTableError(itemsErr)) {
-              console.warn("Supabase sale_items insert warning:", itemsErr.message);
-            }
-          }
-
-          if (!saleErr && sale.payments && sale.payments.length > 0) {
-            const paymentsPayload = sale.payments.map(pay => ({
-              id: pay.id,
-              sale_id: sale.id,
-              amount: pay.amount,
-              date: pay.date,
-              method: pay.method
-            }));
-            const { error: paymentsErr } = await supabase.from('sale_payments').insert(paymentsPayload);
-            if (paymentsErr && !isPgrstMissingTableError(paymentsErr)) {
-              console.warn("Supabase sale_payments insert warning:", paymentsErr.message);
-            }
+        if (sale.items.length > 0) {
+          const itemsPayload = sale.items.map(item => ({
+            sale_id: sale.id,
+            product_id: item.productId,
+            product_name: item.productName,
+            quantity: item.quantity,
+            unit: item.unit,
+            price_per_unit: item.pricePerUnit,
+            sub_total: item.subTotal
+          }));
+          const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
+          if (itemsErr && !isPgrstMissingTableError(itemsErr)) {
+            console.warn("Supabase sale_items insert warning:", itemsErr.message);
           }
         }
-      } catch (err) {
-        console.warn("Cloud addSale skipped:", err);
+
+        if (sale.payments && sale.payments.length > 0) {
+          const paymentsPayload = sale.payments.map(pay => ({
+            id: pay.id,
+            sale_id: sale.id,
+            amount: pay.amount,
+            date: pay.date,
+            method: pay.method
+          }));
+          const { error: paymentsErr } = await supabase.from('sale_payments').insert(paymentsPayload);
+          if (paymentsErr && !isPgrstMissingTableError(paymentsErr)) {
+            console.warn("Supabase sale_payments insert warning:", paymentsErr.message);
+          }
+        }
+      } catch (err: any) {
+        if (isPgrstMissingTableError(err)) return;
+        console.warn("Supabase sale sync skipped:", err);
       }
     }
-
-    const sales = getFromLocal<Sale>(STORAGE_KEYS.SALES, email);
-    sales.push(sale);
-    saveToLocal(STORAGE_KEYS.SALES, sales, email);
   },
 
   async updateSale(email: string, sale: Sale) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error: updateErr } = await supabase.from('sales').update({
-            total_price: sale.totalPrice,
-            discount: sale.discount || 0,
-            amount_paid: sale.amountPaid,
-            due_amount: sale.dueAmount,
-            customer_name: sale.customerName || null,
-            customer_phone: sale.customerPhone || null,
-            payment_method: sale.paymentMethod,
-            mobile_provider: sale.mobileProvider || null,
-            transaction_id: sale.transactionId || null
-          }).eq('id', sale.id);
+    const cleanEmail = email.trim().toLowerCase();
+    const currentSales = getFromLocal<Sale>(STORAGE_KEYS.SALES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.SALES, currentSales.map(s => s.id === sale.id ? sale : s), cleanEmail);
 
-          if (!updateErr && sale.payments && sale.payments.length > 0) {
-            for (const pay of sale.payments) {
-              await supabase.from('sale_payments').upsert({
-                id: pay.id,
-                sale_id: sale.id,
-                amount: pay.amount,
-                date: pay.date,
-                method: pay.method
-              });
-            }
-          }
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      if (!userId) return;
+
+      const { error: updateErr } = await supabase.from('sales').update({
+        total_price: sale.totalPrice,
+        discount: sale.discount || 0,
+        amount_paid: sale.amountPaid,
+        due_amount: sale.dueAmount,
+        customer_name: sale.customerName || null,
+        customer_phone: sale.customerPhone || null,
+        payment_method: sale.paymentMethod,
+        mobile_provider: sale.mobileProvider || null,
+        transaction_id: sale.transactionId || null
+      }).eq('id', sale.id);
+
+      if (updateErr) {
+        if (isPgrstMissingTableError(updateErr)) {
+          console.warn("Supabase sales table not yet provisioned in schema cache (PGRST205).");
+          return;
         }
-      } catch (err) {
-        console.warn("Cloud updateSale skipped:", err);
+        console.error("Supabase updateSale error:", updateErr);
+        return;
       }
-    }
 
-    const sales = getFromLocal<Sale>(STORAGE_KEYS.SALES, email);
-    const index = sales.findIndex(s => s.id === sale.id);
-    if (index > -1) {
-      sales[index] = sale;
-      saveToLocal(STORAGE_KEYS.SALES, sales, email);
+      if (sale.payments && sale.payments.length > 0) {
+        for (const pay of sale.payments) {
+          await supabase.from('sale_payments').upsert({
+            id: pay.id,
+            sale_id: sale.id,
+            amount: pay.amount,
+            date: pay.date,
+            method: pay.method
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Cloud updateSale skipped:", e);
     }
   },
 
   async deleteSale(email: string, id: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          // Atomically cancel sale and restore product inventory via PostgreSQL transactional function
-          const { error } = await supabase.rpc('cancel_sale_and_restore_stock', { p_sale_id: id });
-          if (error && !isPgrstMissingTableError(error)) {
-            await supabase.from('sales').delete().eq('id', id);
-          }
+    const cleanEmail = email.trim().toLowerCase();
+    const currentSales = getFromLocal<Sale>(STORAGE_KEYS.SALES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.SALES, currentSales.filter(s => s.id !== id), cleanEmail);
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      if (!userId) return;
+
+      // Atomically cancel sale and restore product inventory via PostgreSQL transactional function
+      const { error } = await supabase.rpc('cancel_sale_and_restore_stock', { p_sale_id: id });
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase sales function or table not yet provisioned in schema cache (PGRST205).");
+          return;
         }
-      } catch (err) {
-        console.warn("Cloud deleteSale skipped:", err);
+        const { error: delErr } = await supabase.from('sales').delete().eq('id', id);
+        if (delErr && !isPgrstMissingTableError(delErr)) {
+          console.error("Supabase deleteSale error:", delErr);
+        }
       }
-    }
-
-    const sales = getFromLocal<Sale>(STORAGE_KEYS.SALES, email);
-    const targetSale = sales.find(s => s.id === id);
-    saveToLocal(STORAGE_KEYS.SALES, sales.filter(s => s.id !== id), email);
-
-    // If target sale had items, restore stock in local cache as well
-    if (targetSale && targetSale.items.length > 0) {
-      const products = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, email);
-      const updatedProds = products.map(p => {
-        const item = targetSale.items.find(i => i.productId === p.id);
-        return item ? { ...p, stock: p.stock + item.quantity } : p;
-      });
-      saveToLocal(STORAGE_KEYS.PRODUCTS, updatedProds, email);
+    } catch (e) {
+      console.warn("Cloud deleteSale skipped:", e);
     }
   },
 
@@ -718,785 +742,1033 @@ export const storageService = {
   // EXPENSES
   // --------------------------------------------------------------------------
   async getExpenses(email: string): Promise<Expense[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const localExpenses = getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('expenses')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('expenses')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const expenses: Expense[] = data.map(row => ({
-          id: row.id,
-          description: row.description,
-          amount: Number(row.amount),
-          category: row.category,
-          date: row.date
-        }));
-        saveToLocal(STORAGE_KEYS.EXPENSES, expenses, email);
-        return expenses;
+        if (!error && data) {
+          const remoteExpenses = data.map(row => ({
+            id: row.id,
+            description: row.description,
+            amount: Number(row.amount),
+            category: row.category,
+            date: row.date
+          }));
+          saveToLocal(STORAGE_KEYS.EXPENSES, remoteExpenses, cleanEmail);
+          return remoteExpenses;
+        }
+      } catch (e) {
+        console.warn("Error loading expenses from cloud, using local cache:", e);
       }
     }
-    return getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, email);
+    return localExpenses;
   },
 
   async addExpense(email: string, expense: Expense) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: expense.id,
-            user_id: userId,
-            description: expense.description,
-            amount: expense.amount,
-            category: expense.category,
-            date: expense.date
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('expenses').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addExpense warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addExpense skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.EXPENSES, [expense, ...current.filter(e => e.id !== expense.id)], cleanEmail);
 
-    const expenses = getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, email);
-    expenses.push(expense);
-    saveToLocal(STORAGE_KEYS.EXPENSES, expenses, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: expense.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        description: expense.description,
+        amount: expense.amount,
+        category: expense.category,
+        date: expense.date
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('expenses').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase expenses table not yet provisioned in schema cache (PGRST205). Expense saved locally.");
+          return;
+        }
+        console.error("Supabase addExpense error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addExpense skipped:", e);
+    }
+  },
+
+  async deleteExpense(email: string, id: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Expense>(STORAGE_KEYS.EXPENSES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.EXPENSES, current.filter(e => e.id !== id), cleanEmail);
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('expenses').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase expenses table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteExpense error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteExpense skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // WASTAGE
   // --------------------------------------------------------------------------
   async getWastage(email: string): Promise<Wastage[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const localWastage = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('wastage')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('wastage')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const wastage: Wastage[] = data.map(row => ({
-          id: row.id,
-          productId: row.product_id || '',
-          productName: row.product_name,
-          quantity: Number(row.quantity),
-          unit: row.unit,
-          lossValue: Number(row.loss_value),
-          reason: row.reason || '',
-          date: row.date
-        }));
-        saveToLocal(STORAGE_KEYS.WASTAGE, wastage, email);
-        return wastage;
+        if (!error && data) {
+          const remoteWastage = data.map(row => ({
+            id: row.id,
+            productId: row.product_id || '',
+            productName: row.product_name,
+            quantity: Number(row.quantity),
+            unit: row.unit,
+            lossValue: Number(row.loss_value),
+            reason: row.reason || '',
+            date: row.date
+          }));
+          saveToLocal(STORAGE_KEYS.WASTAGE, remoteWastage, cleanEmail);
+          return remoteWastage;
+        }
+      } catch (e) {
+        console.warn("Error loading wastage from cloud, using local cache:", e);
       }
     }
-    return getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, email);
+    return localWastage;
   },
 
   async addWastage(email: string, wastage: Wastage) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: wastage.id,
-            user_id: userId,
-            product_id: wastage.productId || null,
-            product_name: wastage.productName,
-            quantity: wastage.quantity,
-            unit: wastage.unit,
-            loss_value: wastage.lossValue,
-            reason: wastage.reason,
-            date: wastage.date
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('wastage').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addWastage warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addWastage skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, cleanEmail);
+    saveToLocal(STORAGE_KEYS.WASTAGE, [wastage, ...current.filter(w => w.id !== wastage.id)], cleanEmail);
 
-    const all = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, email);
-    all.push(wastage);
-    saveToLocal(STORAGE_KEYS.WASTAGE, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: wastage.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        product_id: wastage.productId || null,
+        product_name: wastage.productName,
+        quantity: wastage.quantity,
+        unit: wastage.unit,
+        loss_value: wastage.lossValue,
+        reason: wastage.reason,
+        date: wastage.date
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('wastage').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase wastage table not yet provisioned in schema cache (PGRST205). Wastage saved locally.");
+          return;
+        }
+        console.error("Supabase addWastage error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addWastage skipped:", e);
+    }
   },
 
   async deleteWastage(email: string, id: string) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('wastage').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteWastage warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud deleteWastage skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, cleanEmail);
+    saveToLocal(STORAGE_KEYS.WASTAGE, current.filter(w => w.id !== id), cleanEmail);
 
-    const all = getFromLocal<Wastage>(STORAGE_KEYS.WASTAGE, email);
-    saveToLocal(STORAGE_KEYS.WASTAGE, all.filter(w => w.id !== id), email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('wastage').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase wastage table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteWastage error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteWastage skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // STAFF
   // --------------------------------------------------------------------------
   async getStaff(email: string): Promise<Staff[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<Staff>(STORAGE_KEYS.STAFF, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('staff')
-        .select('*')
-        .order('name', { ascending: true });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('staff')
+          .select('*')
+          .order('name', { ascending: true });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const staffList: Staff[] = data.map(row => ({
-          id: row.id,
-          name: row.name,
-          designation: row.designation,
-          monthlySalary: Number(row.monthly_salary),
-          joinDate: row.join_date
-        }));
-        saveToLocal(STORAGE_KEYS.STAFF, staffList, email);
-        return staffList;
+        if (!error && data) {
+          const remoteStaff = data.map(row => ({
+            id: row.id,
+            name: row.name,
+            designation: row.designation,
+            monthlySalary: Number(row.monthly_salary),
+            joinDate: row.join_date
+          }));
+          saveToLocal(STORAGE_KEYS.STAFF, remoteStaff, cleanEmail);
+          return remoteStaff;
+        }
+      } catch (e) {
+        console.warn("Error fetching staff from cloud:", e);
       }
     }
-    return getFromLocal<Staff>(STORAGE_KEYS.STAFF, email);
+    return local;
   },
 
   async addStaff(email: string, staff: Staff) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: staff.id,
-            user_id: userId,
-            name: staff.name,
-            designation: staff.designation,
-            monthly_salary: staff.monthlySalary,
-            join_date: staff.joinDate
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('staff').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addStaff warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addStaff skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Staff>(STORAGE_KEYS.STAFF, cleanEmail);
+    saveToLocal(STORAGE_KEYS.STAFF, [staff, ...current.filter(s => s.id !== staff.id)], cleanEmail);
 
-    const all = getFromLocal<Staff>(STORAGE_KEYS.STAFF, email);
-    all.push(staff);
-    saveToLocal(STORAGE_KEYS.STAFF, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: staff.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        name: staff.name,
+        designation: staff.designation,
+        monthly_salary: staff.monthlySalary,
+        join_date: staff.joinDate
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('staff').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase staff table not yet provisioned in schema cache (PGRST205). Staff saved locally.");
+          return;
+        }
+        console.error("Supabase addStaff error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addStaff skipped:", e);
+    }
+  },
+
+  async deleteStaff(email: string, id: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Staff>(STORAGE_KEYS.STAFF, cleanEmail);
+    saveToLocal(STORAGE_KEYS.STAFF, current.filter(s => s.id !== id), cleanEmail);
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('staff').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase staff table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteStaff error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteStaff skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // ATTENDANCE
   // --------------------------------------------------------------------------
   async getAttendance(email: string): Promise<Attendance[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('attendance')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('attendance')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const att: Attendance[] = data.map(row => ({
-          id: row.id,
-          staffId: row.staff_id,
-          date: row.date,
-          status: row.status
-        }));
-        saveToLocal(STORAGE_KEYS.ATTENDANCE, att, email);
-        return att;
+        if (!error && data) {
+          const remoteAtt = data.map(row => ({
+            id: row.id,
+            staffId: row.staff_id,
+            date: row.date,
+            status: row.status
+          }));
+          saveToLocal(STORAGE_KEYS.ATTENDANCE, remoteAtt, cleanEmail);
+          return remoteAtt;
+        }
+      } catch (e) {
+        console.warn("Error fetching attendance from cloud:", e);
       }
     }
-    return getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, email);
+    return local;
   },
 
   async upsertAttendance(email: string, attendance: Attendance) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: attendance.id,
-            user_id: userId,
-            staff_id: attendance.staffId,
-            date: attendance.date,
-            status: attendance.status
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('attendance').upsert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase upsertAttendance warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud upsertAttendance skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, cleanEmail);
+    const updated = current.filter(a => a.id !== attendance.id).concat(attendance);
+    saveToLocal(STORAGE_KEYS.ATTENDANCE, updated, cleanEmail);
 
-    const all = getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, email);
-    const index = all.findIndex(item => item.staffId === attendance.staffId && item.date === attendance.date);
-    if (index > -1) {
-      all[index] = attendance;
-    } else {
-      all.push(attendance);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: attendance.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        staff_id: attendance.staffId,
+        date: attendance.date,
+        status: attendance.status
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('attendance').upsert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase attendance table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase upsertAttendance error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud upsertAttendance skipped:", e);
     }
-    saveToLocal(STORAGE_KEYS.ATTENDANCE, all, email);
+  },
+
+  async deleteAttendance(email: string, id: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Attendance>(STORAGE_KEYS.ATTENDANCE, cleanEmail);
+    saveToLocal(STORAGE_KEYS.ATTENDANCE, current.filter(a => a.id !== id), cleanEmail);
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('attendance').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase attendance table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteAttendance error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteAttendance skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // DEDUCTIONS
   // --------------------------------------------------------------------------
   async getDeductions(email: string): Promise<Deduction[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('deductions')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('deductions')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const ded: Deduction[] = data.map(row => ({
-          id: row.id,
-          staffId: row.staff_id,
-          amount: Number(row.amount),
-          reason: row.reason,
-          date: row.date
-        }));
-        saveToLocal(STORAGE_KEYS.DEDUCTIONS, ded, email);
-        return ded;
+        if (!error && data) {
+          const remoteDed = data.map(row => ({
+            id: row.id,
+            staffId: row.staff_id,
+            amount: Number(row.amount),
+            reason: row.reason,
+            date: row.date
+          }));
+          saveToLocal(STORAGE_KEYS.DEDUCTIONS, remoteDed, cleanEmail);
+          return remoteDed;
+        }
+      } catch (e) {
+        console.warn("Error fetching deductions from cloud:", e);
       }
     }
-    return getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, email);
+    return local;
   },
 
   async addDeduction(email: string, deduction: Deduction) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: deduction.id,
-            user_id: userId,
-            staff_id: deduction.staffId,
-            amount: deduction.amount,
-            reason: deduction.reason,
-            date: deduction.date
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('deductions').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addDeduction warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addDeduction skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DEDUCTIONS, [deduction, ...current.filter(d => d.id !== deduction.id)], cleanEmail);
 
-    const all = getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, email);
-    all.push(deduction);
-    saveToLocal(STORAGE_KEYS.DEDUCTIONS, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: deduction.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        staff_id: deduction.staffId,
+        amount: deduction.amount,
+        reason: deduction.reason,
+        date: deduction.date
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('deductions').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase deductions table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase addDeduction error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addDeduction skipped:", e);
+    }
+  },
+
+  async deleteDeduction(email: string, id: string) {
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Deduction>(STORAGE_KEYS.DEDUCTIONS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DEDUCTIONS, current.filter(d => d.id !== id), cleanEmail);
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('deductions').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase deductions table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteDeduction error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteDeduction skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // DAILY CLOSINGS
   // --------------------------------------------------------------------------
   async getClosings(email: string): Promise<DailyClosing[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<DailyClosing>(STORAGE_KEYS.DAILY_CLOSINGS, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('daily_closings')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('daily_closings')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const closings: DailyClosing[] = data.map(row => ({
-          id: row.id,
-          date: row.date,
-          totalSales: Number(row.total_sales),
-          totalCashCollected: Number(row.total_cash_collected),
-          totalCashPayments: Number(row.total_cash_payments),
-          totalMobilePayments: Number(row.total_mobile_payments),
-          totalExpenses: Number(row.total_expenses),
-          totalWastage: Number(row.total_wastage),
-          systemBalance: Number(row.system_balance),
-          actualCash: Number(row.actual_cash),
-          difference: Number(row.difference),
-          closedBy: row.closed_by,
-          timestamp: row.timestamp
-        }));
-        saveToLocal(STORAGE_KEYS.CLOSINGS, closings, email);
-        return closings;
+        if (!error && data) {
+          const remoteClosings = data.map(row => ({
+            id: row.id,
+            date: row.date,
+            totalSales: Number(row.total_sales),
+            totalCashCollected: Number(row.total_cash_collected),
+            totalCashPayments: Number(row.total_cash_payments),
+            totalMobilePayments: Number(row.total_mobile_payments),
+            totalExpenses: Number(row.total_expenses),
+            totalWastage: Number(row.total_wastage),
+            systemBalance: Number(row.system_balance),
+            actualCash: Number(row.actual_cash),
+            difference: Number(row.difference),
+            closedBy: row.closed_by,
+            timestamp: row.timestamp
+          }));
+          saveToLocal(STORAGE_KEYS.DAILY_CLOSINGS, remoteClosings, cleanEmail);
+          return remoteClosings;
+        }
+      } catch (e) {
+        console.warn("Error fetching closings from cloud:", e);
       }
     }
-    return getFromLocal<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
+    return local;
   },
 
   async addClosing(email: string, closing: DailyClosing) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: closing.id,
-            user_id: userId,
-            date: closing.date,
-            total_sales: closing.totalSales,
-            total_cash_collected: closing.totalCashCollected,
-            total_cash_payments: closing.totalCashPayments,
-            total_mobile_payments: closing.totalMobilePayments,
-            totalExpenses: closing.totalExpenses,
-            total_wastage: closing.totalWastage,
-            system_balance: closing.systemBalance,
-            actual_cash: closing.actualCash,
-            difference: closing.difference,
-            closed_by: closing.closedBy,
-            timestamp: closing.timestamp
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('daily_closings').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addClosing warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addClosing skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyClosing>(STORAGE_KEYS.DAILY_CLOSINGS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_CLOSINGS, [closing, ...current.filter(c => c.id !== closing.id)], cleanEmail);
 
-    const all = getFromLocal<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    all.push(closing);
-    saveToLocal(STORAGE_KEYS.CLOSINGS, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: closing.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        date: closing.date,
+        total_sales: closing.totalSales,
+        total_cash_collected: closing.totalCashCollected,
+        total_cash_payments: closing.totalCashPayments,
+        total_mobile_payments: closing.totalMobilePayments,
+        total_expenses: closing.totalExpenses,
+        total_wastage: closing.totalWastage,
+        system_balance: closing.systemBalance,
+        actual_cash: closing.actualCash,
+        difference: closing.difference,
+        closed_by: closing.closedBy,
+        timestamp: closing.timestamp
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('daily_closings').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_closings table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase addClosing error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addClosing skipped:", e);
+    }
   },
 
   async updateClosing(email: string, updatedClosing: DailyClosing) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('daily_closings').update({
-            total_sales: updatedClosing.totalSales,
-            total_cash_collected: updatedClosing.totalCashCollected,
-            total_cash_payments: updatedClosing.totalCashPayments,
-            total_mobile_payments: updatedClosing.totalMobilePayments,
-            total_expenses: updatedClosing.totalExpenses,
-            total_wastage: updatedClosing.totalWastage,
-            system_balance: updatedClosing.systemBalance,
-            actual_cash: updatedClosing.actualCash,
-            difference: updatedClosing.difference,
-            closed_by: updatedClosing.closedBy,
-            timestamp: updatedClosing.timestamp
-          }).eq('id', updatedClosing.id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase updateClosing warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud updateClosing skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyClosing>(STORAGE_KEYS.DAILY_CLOSINGS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_CLOSINGS, current.map(c => c.id === updatedClosing.id ? updatedClosing : c), cleanEmail);
 
-    const all = getFromLocal<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    const updated = all.map(c => c.id === updatedClosing.id ? updatedClosing : c);
-    saveToLocal(STORAGE_KEYS.CLOSINGS, updated, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('daily_closings').update({
+        total_sales: updatedClosing.totalSales,
+        total_cash_collected: updatedClosing.totalCashCollected,
+        total_cash_payments: updatedClosing.totalCashPayments,
+        total_mobile_payments: updatedClosing.totalMobilePayments,
+        total_expenses: updatedClosing.totalExpenses,
+        total_wastage: updatedClosing.totalWastage,
+        system_balance: updatedClosing.systemBalance,
+        actual_cash: updatedClosing.actualCash,
+        difference: updatedClosing.difference,
+        closed_by: updatedClosing.closedBy,
+        timestamp: updatedClosing.timestamp
+      }).eq('id', updatedClosing.id);
+
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_closings table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase updateClosing error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud updateClosing skipped:", e);
+    }
   },
 
   async deleteClosing(email: string, id: string) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('daily_closings').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteClosing warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud deleteClosing skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyClosing>(STORAGE_KEYS.DAILY_CLOSINGS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_CLOSINGS, current.filter(c => c.id !== id), cleanEmail);
 
-    const all = getFromLocal<DailyClosing>(STORAGE_KEYS.CLOSINGS, email);
-    saveToLocal(STORAGE_KEYS.CLOSINGS, all.filter(c => c.id !== id), email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('daily_closings').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_closings table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteClosing error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteClosing skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // MONTHLY CLOSINGS
   // --------------------------------------------------------------------------
   async getMonthlyClosings(email: string): Promise<MonthlyClosing[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('monthly_closings')
-        .select('*')
-        .order('timestamp', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('monthly_closings')
+          .select('*')
+          .order('timestamp', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const mc: MonthlyClosing[] = data.map(row => ({
-          id: row.id,
-          month: row.month,
-          totalSales: Number(row.total_sales),
-          totalCashPayments: Number(row.total_cash_payments),
-          totalMobilePayments: Number(row.total_mobile_payments),
-          totalExpenses: Number(row.total_expenses),
-          totalWastage: Number(row.total_wastage),
-          totalProfit: Number(row.total_profit),
-          totalDues: Number(row.total_dues || 0),
-          closedBy: row.closed_by,
-          timestamp: row.timestamp
-        }));
-        saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, mc, email);
-        return mc;
+        if (!error && data) {
+          const remoteMonthly = data.map(row => ({
+            id: row.id,
+            month: row.month,
+            totalSales: Number(row.total_sales),
+            totalCashPayments: Number(row.total_cash_payments),
+            totalMobilePayments: Number(row.total_mobile_payments),
+            totalExpenses: Number(row.total_expenses),
+            totalWastage: Number(row.total_wastage),
+            totalProfit: Number(row.total_profit),
+            totalDues: Number(row.total_dues || 0),
+            closedBy: row.closed_by,
+            timestamp: row.timestamp
+          }));
+          saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, remoteMonthly, cleanEmail);
+          return remoteMonthly;
+        }
+      } catch (e) {
+        console.warn("Error fetching monthly closings from cloud:", e);
       }
     }
-    return getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
+    return local;
   },
 
   async addMonthlyClosing(email: string, closing: MonthlyClosing) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: closing.id,
-            user_id: userId,
-            month: closing.month,
-            total_sales: closing.totalSales,
-            total_cash_payments: closing.totalCashPayments,
-            total_mobile_payments: closing.totalMobilePayments,
-            total_expenses: closing.totalExpenses,
-            total_wastage: closing.totalWastage,
-            total_profit: closing.totalProfit,
-            total_dues: closing.totalDues || 0,
-            closed_by: closing.closedBy,
-            timestamp: closing.timestamp
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('monthly_closings').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addMonthlyClosing warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addMonthlyClosing skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, [closing, ...current.filter(c => c.id !== closing.id)], cleanEmail);
 
-    const all = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
-    all.push(closing);
-    saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: closing.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        month: closing.month,
+        total_sales: closing.totalSales,
+        total_cash_payments: closing.totalCashPayments,
+        total_mobile_payments: closing.totalMobilePayments,
+        total_expenses: closing.totalExpenses,
+        total_wastage: closing.totalWastage,
+        total_profit: closing.totalProfit,
+        total_dues: closing.totalDues || 0,
+        closed_by: closing.closedBy,
+        timestamp: closing.timestamp
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('monthly_closings').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase monthly_closings table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase addMonthlyClosing error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addMonthlyClosing skipped:", e);
+    }
   },
 
   async deleteMonthlyClosing(email: string, id: string) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('monthly_closings').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteMonthlyClosing warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud deleteMonthlyClosing skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, cleanEmail);
+    saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, current.filter(c => c.id !== id), cleanEmail);
 
-    const all = getFromLocal<MonthlyClosing>(STORAGE_KEYS.MONTHLY_CLOSINGS, email);
-    saveToLocal(STORAGE_KEYS.MONTHLY_CLOSINGS, all.filter(c => c.id !== id), email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('monthly_closings').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase monthly_closings table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteMonthlyClosing error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteMonthlyClosing skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // PRODUCTION
   // --------------------------------------------------------------------------
   async getProduction(email: string): Promise<Production[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('production')
-        .select('*')
-        .order('date', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('production')
+          .select('*')
+          .order('date', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const prodList: Production[] = data.map(row => ({
-          id: row.id,
-          productId: row.product_id || '',
-          productName: row.product_name,
-          quantity: Number(row.quantity),
-          unit: row.unit,
-          unitPrice: Number(row.unit_price),
-          totalValue: Number(row.total_value),
-          date: row.date
-        }));
-        saveToLocal(STORAGE_KEYS.PRODUCTION, prodList, email);
-        return prodList;
+        if (!error && data) {
+          const remoteProd = data.map(row => ({
+            id: row.id,
+            productId: row.product_id || '',
+            productName: row.product_name,
+            quantity: Number(row.quantity),
+            unit: row.unit,
+            unitPrice: Number(row.unit_price),
+            totalValue: Number(row.total_value),
+            date: row.date
+          }));
+          saveToLocal(STORAGE_KEYS.PRODUCTION, remoteProd, cleanEmail);
+          return remoteProd;
+        }
+      } catch (e) {
+        console.warn("Error fetching production from cloud:", e);
       }
     }
-    return getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, email);
+    return local;
   },
 
   async addProduction(email: string, production: Production) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: production.id,
-            user_id: userId,
-            product_id: production.productId || null,
-            product_name: production.productName,
-            quantity: production.quantity,
-            unit: production.unit,
-            unit_price: production.unitPrice,
-            total_value: production.totalValue,
-            date: production.date
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('production').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addProduction warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addProduction skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, cleanEmail);
+    saveToLocal(STORAGE_KEYS.PRODUCTION, [production, ...current.filter(p => p.id !== production.id)], cleanEmail);
 
-    const all = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, email);
-    all.push(production);
-    saveToLocal(STORAGE_KEYS.PRODUCTION, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: production.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        product_id: production.productId || null,
+        product_name: production.productName,
+        quantity: production.quantity,
+        unit: production.unit,
+        unit_price: production.unitPrice,
+        total_value: production.totalValue,
+        date: production.date
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('production').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase production table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase addProduction error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addProduction skipped:", e);
+    }
   },
 
   async deleteProduction(email: string, id: string) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('production').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteProduction warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud deleteProduction skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, cleanEmail);
+    saveToLocal(STORAGE_KEYS.PRODUCTION, current.filter(p => p.id !== id), cleanEmail);
 
-    const all = getFromLocal<Production>(STORAGE_KEYS.PRODUCTION, email);
-    saveToLocal(STORAGE_KEYS.PRODUCTION, all.filter(p => p.id !== id), email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('production').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase production table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteProduction error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteProduction skipped:", e);
+    }
   },
 
   // --------------------------------------------------------------------------
   // DAILY NOTES
   // --------------------------------------------------------------------------
   async getNotes(email: string): Promise<DailyNote[]> {
+    const cleanEmail = email.trim().toLowerCase();
+    const local = getFromLocal<DailyNote>(STORAGE_KEYS.DAILY_NOTES, cleanEmail);
+
     if (isSupabaseConfigured && supabase) {
-      const branchId = await getActiveBranchId(email);
-      let query = supabase
-        .from('daily_notes')
-        .select('*')
-        .order('created_at', { ascending: false });
+      try {
+        const userId = await getActiveUserId(cleanEmail);
+        const branchId = await getActiveBranchId(cleanEmail);
+        let query = supabase
+          .from('daily_notes')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        } else if (userId) {
+          query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+        } else {
+          query = query.eq('user_email', cleanEmail);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        const noteList: DailyNote[] = data.map(row => ({
-          id: row.id,
-          title: row.title,
-          content: row.content,
-          priority: row.priority,
-          status: row.status,
-          assignedTo: row.assigned_to || undefined,
-          author: row.author,
-          pinned: Boolean(row.pinned),
-          createdAt: row.created_at
-        }));
-        saveToLocal(STORAGE_KEYS.NOTES, noteList, email);
-        return noteList;
+        if (!error && data) {
+          const remoteNotes = data.map(row => ({
+            id: row.id,
+            title: row.title,
+            content: row.content,
+            priority: row.priority,
+            status: row.status,
+            assignedTo: row.assigned_to || undefined,
+            author: row.author,
+            pinned: Boolean(row.pinned),
+            createdAt: row.created_at
+          }));
+          saveToLocal(STORAGE_KEYS.DAILY_NOTES, remoteNotes, cleanEmail);
+          return remoteNotes;
+        }
+      } catch (e) {
+        console.warn("Error fetching notes from cloud:", e);
       }
     }
-    return getFromLocal<DailyNote>(STORAGE_KEYS.NOTES, email);
+    return local;
   },
 
   async addNote(email: string, note: DailyNote) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const branchId = await getActiveBranchId(email);
-          const payload: any = {
-            id: note.id,
-            user_id: userId,
-            title: note.title,
-            content: note.content,
-            priority: note.priority,
-            status: note.status,
-            assigned_to: note.assignedTo || null,
-            author: note.author,
-            pinned: note.pinned || false,
-            created_at: note.createdAt
-          };
-          if (branchId) {
-            payload.branch_id = branchId;
-          }
-          const { error } = await supabase.from('daily_notes').insert(payload);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase addNote warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud addNote skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyNote>(STORAGE_KEYS.DAILY_NOTES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_NOTES, [note, ...current.filter(n => n.id !== note.id)], cleanEmail);
 
-    const all = getFromLocal<DailyNote>(STORAGE_KEYS.NOTES, email);
-    all.unshift(note);
-    saveToLocal(STORAGE_KEYS.NOTES, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const userId = await requireAuthUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const payload: any = {
+        id: note.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        title: note.title,
+        content: note.content,
+        priority: note.priority,
+        status: note.status,
+        assigned_to: note.assignedTo || null,
+        author: note.author,
+        pinned: note.pinned || false,
+        created_at: note.createdAt
+      };
+      if (branchId) {
+        payload.branch_id = branchId;
+      }
+      const { error } = await supabase.from('daily_notes').insert(payload);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_notes table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase addNote error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud addNote skipped:", e);
+    }
   },
 
   async updateNote(email: string, updatedNote: DailyNote) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('daily_notes').update({
-            title: updatedNote.title,
-            content: updatedNote.content,
-            priority: updatedNote.priority,
-            status: updatedNote.status,
-            assigned_to: updatedNote.assignedTo || null,
-            author: updatedNote.author,
-            pinned: updatedNote.pinned || false
-          }).eq('id', updatedNote.id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase updateNote warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud updateNote skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyNote>(STORAGE_KEYS.DAILY_NOTES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_NOTES, current.map(n => n.id === updatedNote.id ? updatedNote : n), cleanEmail);
 
-    const all = getFromLocal<DailyNote>(STORAGE_KEYS.NOTES, email);
-    const index = all.findIndex(n => n.id === updatedNote.id);
-    if (index > -1) {
-      all[index] = updatedNote;
-      saveToLocal(STORAGE_KEYS.NOTES, all, email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('daily_notes').update({
+        title: updatedNote.title,
+        content: updatedNote.content,
+        priority: updatedNote.priority,
+        status: updatedNote.status,
+        assigned_to: updatedNote.assignedTo || null,
+        author: updatedNote.author,
+        pinned: updatedNote.pinned || false
+      }).eq('id', updatedNote.id);
+
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_notes table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase updateNote error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud updateNote skipped:", e);
     }
   },
 
   async deleteNote(email: string, id: string) {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const { error } = await supabase.from('daily_notes').delete().eq('id', id);
-          if (error && !isPgrstMissingTableError(error)) {
-            console.warn("Supabase deleteNote warning:", error.message);
-          }
-        }
-      } catch (err) {
-        console.warn("Cloud deleteNote skipped:", err);
-      }
-    }
+    const cleanEmail = email.trim().toLowerCase();
+    const current = getFromLocal<DailyNote>(STORAGE_KEYS.DAILY_NOTES, cleanEmail);
+    saveToLocal(STORAGE_KEYS.DAILY_NOTES, current.filter(n => n.id !== id), cleanEmail);
 
-    const all = getFromLocal<DailyNote>(STORAGE_KEYS.NOTES, email);
-    saveToLocal(STORAGE_KEYS.NOTES, all.filter(n => n.id !== id), email);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const { error } = await supabase.from('daily_notes').delete().eq('id', id);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          console.warn("Supabase daily_notes table not yet provisioned in schema cache (PGRST205).");
+          return;
+        }
+        console.error("Supabase deleteNote error:", error);
+      }
+    } catch (e) {
+      console.warn("Cloud deleteNote skipped:", e);
+    }
+  },
+
+  async checkDatabaseHealth(): Promise<{
+    configured: boolean;
+    tablesProvisioned: boolean;
+    error?: string;
+  }> {
+    if (!isSupabaseConfigured || !supabase) {
+      return { configured: false, tablesProvisioned: false, error: 'Supabase URL or Key not configured.' };
+    }
+    try {
+      const { error } = await supabase.from('products').select('id').limit(1);
+      if (error) {
+        if (isPgrstMissingTableError(error)) {
+          return { configured: true, tablesProvisioned: false, error: 'Database tables not yet created in Supabase schema.' };
+        }
+        return { configured: true, tablesProvisioned: false, error: error.message };
+      }
+      return { configured: true, tablesProvisioned: true };
+    } catch (err: any) {
+      return { configured: true, tablesProvisioned: false, error: err.message };
+    }
   },
 
   // --------------------------------------------------------------------------
@@ -1506,7 +1778,7 @@ export const storageService = {
     const cleanEmail = email.trim().toLowerCase();
     try {
       if (isSupabaseConfigured && supabase) {
-        const userId = await requireAuthUserId();
+        const userId = await requireAuthUserId(cleanEmail);
         if (userId) {
           const branchId = await getActiveBranchId(cleanEmail);
           if (branchId) {
@@ -1522,17 +1794,17 @@ export const storageService = {
             await supabase.from('production').delete().eq('branch_id', branchId);
             await supabase.from('daily_notes').delete().eq('branch_id', branchId);
           } else {
-            await supabase.from('sales').delete().eq('user_id', userId);
-            await supabase.from('products').delete().eq('user_id', userId);
-            await supabase.from('expenses').delete().eq('user_id', userId);
-            await supabase.from('wastage').delete().eq('user_id', userId);
-            await supabase.from('staff').delete().eq('user_id', userId);
-            await supabase.from('attendance').delete().eq('user_id', userId);
-            await supabase.from('deductions').delete().eq('user_id', userId);
-            await supabase.from('daily_closings').delete().eq('user_id', userId);
-            await supabase.from('monthly_closings').delete().eq('user_id', userId);
-            await supabase.from('production').delete().eq('user_id', userId);
-            await supabase.from('daily_notes').delete().eq('user_id', userId);
+            await supabase.from('sales').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('products').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('expenses').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('wastage').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('staff').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('attendance').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('deductions').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('daily_closings').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('monthly_closings').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('production').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
+            await supabase.from('daily_notes').delete().or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
           }
         }
       }
@@ -1905,5 +2177,144 @@ export const storageService = {
       console.error("syncAllLocalDataToSupabase error:", err);
       return { success: false, count: 0, error: err.message || "Failed to sync local data to Supabase." };
     }
+  },
+
+  /**
+   * Diagnostic test performing live CRUD operations against public.products
+   */
+  async testDatabaseOperations(email: string): Promise<{
+    success: boolean;
+    step: string;
+    details: string;
+    error?: any;
+    report: {
+      auth: boolean;
+      select: boolean;
+      insert: boolean;
+      update: boolean;
+      delete: boolean;
+    };
+  }> {
+    const report = {
+      auth: false,
+      select: false,
+      insert: false,
+      update: false,
+      delete: false
+    };
+
+    if (!isSupabaseConfigured || !supabase) {
+      return {
+        success: false,
+        step: 'Client Initialization',
+        details: 'Supabase client is not configured (missing URL or Anon Key).',
+        report
+      };
+    }
+
+    // 1. Verify Authentication
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !authData?.user) {
+      return {
+        success: false,
+        step: 'Authentication Check',
+        details: 'No active Supabase user session found. Please log in with email and password to test database persistence.',
+        error: authErr,
+        report
+      };
+    }
+    report.auth = true;
+    const userId = authData.user.id;
+    const branchId = await getActiveBranchId(email);
+
+    // 2. Test SELECT
+    const { error: selectErr } = await supabase
+      .from('products')
+      .select('id, name, price, stock')
+      .limit(1);
+
+    if (selectErr) {
+      return {
+        success: false,
+        step: 'SELECT products',
+        details: selectErr.message,
+        error: selectErr,
+        report
+      };
+    }
+    report.select = true;
+
+    // 3. Test INSERT
+    const testProductId = `_diag_test_${Date.now()}`;
+    const testPayload: any = {
+      id: testProductId,
+      user_id: userId,
+      name: '__DIAGNOSTIC_TEST_PRODUCT__',
+      category: 'Diagnostic',
+      price: 99.99,
+      stock: 10,
+      unit: 'pcs',
+      barcode: 'DIAG123',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    if (branchId) testPayload.branch_id = branchId;
+
+    const { error: insertErr } = await supabase
+      .from('products')
+      .insert(testPayload);
+
+    if (insertErr) {
+      return {
+        success: false,
+        step: 'INSERT product',
+        details: insertErr.message,
+        error: insertErr,
+        report
+      };
+    }
+    report.insert = true;
+
+    // 4. Test UPDATE
+    const { error: updateErr } = await supabase
+      .from('products')
+      .update({ price: 149.99, updated_at: new Date().toISOString() })
+      .eq('id', testProductId);
+
+    if (updateErr) {
+      await supabase.from('products').delete().eq('id', testProductId);
+      return {
+        success: false,
+        step: 'UPDATE product',
+        details: updateErr.message,
+        error: updateErr,
+        report
+      };
+    }
+    report.update = true;
+
+    // 5. Test DELETE
+    const { error: deleteErr } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', testProductId);
+
+    if (deleteErr) {
+      return {
+        success: false,
+        step: 'DELETE product',
+        details: deleteErr.message,
+        error: deleteErr,
+        report
+      };
+    }
+    report.delete = true;
+
+    return {
+      success: true,
+      step: 'Complete',
+      details: 'All CRUD operations (SELECT, INSERT, UPDATE, DELETE) verified successfully on live Supabase database!',
+      report
+    };
   }
 };

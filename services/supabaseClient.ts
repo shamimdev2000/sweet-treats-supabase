@@ -28,19 +28,41 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   : null;
 
 /**
- * Returns the active user ID from Supabase Auth or null
+ * Generates a deterministic RFC4122-compliant UUID string based on an email address.
+ * Ensures consistent tenant identification even if Supabase Auth email confirmation is pending.
  */
-export async function getActiveUserId(): Promise<string | null> {
-  if (!supabase) return null;
+export function getDeterministicUserId(email?: string): string {
+  const clean = (email || 'bakery_owner@sweetlive.com').trim().toLowerCase();
+  let hash1 = 5381;
+  let hash2 = 52711;
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = ((hash2 << 5) + hash2) ^ char;
+  }
+  const hex1 = Math.abs(hash1).toString(16).padStart(8, '0');
+  const hex2 = Math.abs(hash2).toString(16).padStart(8, '0');
+  const hex3 = (Math.abs(hash1 ^ hash2)).toString(16).padStart(8, '0');
+  return `00000000-${hex1.slice(0, 4)}-4000-8000-${(hex2 + hex3).slice(0, 12)}`;
+}
+
+/**
+ * Returns the active user ID from Supabase Auth or derives a deterministic ID from the tenant email.
+ */
+export async function getActiveUserId(fallbackEmail?: string): Promise<string | null> {
+  if (!supabase) return fallbackEmail ? getDeterministicUserId(fallbackEmail) : null;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user?.id) return session.user.id;
     const { data: { user } } = await supabase.auth.getUser();
-    return user?.id || null;
+    if (user?.id) return user.id;
   } catch (err) {
-    console.error('Error fetching Supabase user:', err);
-    return null;
+    console.warn('Error fetching Supabase auth session:', err);
   }
+  if (fallbackEmail) {
+    return getDeterministicUserId(fallbackEmail);
+  }
+  return null;
 }
 
 /**

@@ -339,7 +339,8 @@ const App: React.FC = () => {
     } catch (e: any) {
       console.error("Storage error:", e);
       setSyncStatus('error');
-      setTimeout(() => setSyncStatus(null), 3000);
+      toast.error(`Database persistence error: ${e.message || 'Failed to sync with Supabase'}`, { duration: 5000 });
+      setTimeout(() => setSyncStatus(null), 4000);
     } finally {
       setIsSyncing(false);
     }
