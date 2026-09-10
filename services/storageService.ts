@@ -54,18 +54,20 @@ let inMemoryProfiles: UserProfile[] = (() => {
   }
 })();
 
-export const DEFAULT_INITIAL_PRODUCTS: Product[] = [
-  { id: 'prod_white_bread', name: 'Milk White Bread', category: 'Bread', price: 60, stock: 35, unit: 'pcs', barcode: '8901001' },
-  { id: 'prod_brown_bread', name: 'Whole Wheat Brown Bread', category: 'Bread', price: 75, stock: 25, unit: 'pcs', barcode: '8901002' },
-  { id: 'prod_croissant', name: 'Butter Croissant', category: 'Bread', price: 90, stock: 20, unit: 'pcs', barcode: '8901003' },
-  { id: 'prod_choco_cake', name: 'Chocolate Fudge Cake 500g', category: 'Cake', price: 450, stock: 12, unit: 'pcs', barcode: '8901004' },
-  { id: 'prod_vanilla_pastry', name: 'Vanilla Cream Pastry', category: 'Cake', price: 80, stock: 30, unit: 'pcs', barcode: '8901005' },
-  { id: 'prod_red_velvet', name: 'Red Velvet Slice', category: 'Cake', price: 120, stock: 15, unit: 'pcs', barcode: '8901006' },
-  { id: 'prod_cookies', name: 'Almond Butter Cookies 250g', category: 'Snacks', price: 150, stock: 18, unit: 'pkt', barcode: '8901007' },
-  { id: 'prod_donut', name: 'Glazed Chocolate Donut', category: 'Snacks', price: 70, stock: 25, unit: 'pcs', barcode: '8901008' },
-  { id: 'prod_bun', name: 'Sweet Coconut Bun', category: 'Bread', price: 40, stock: 40, unit: 'pcs', barcode: '8901009' },
-  { id: 'prod_muffin', name: 'Blueberry Streusel Muffin', category: 'Snacks', price: 85, stock: 20, unit: 'pcs', barcode: '8901010' }
-];
+export const DEMO_PRODUCT_IDS = new Set([
+  'prod_white_bread',
+  'prod_brown_bread',
+  'prod_croissant',
+  'prod_choco_cake',
+  'prod_vanilla_pastry',
+  'prod_red_velvet',
+  'prod_cookies',
+  'prod_donut',
+  'prod_bun',
+  'prod_muffin'
+]);
+
+export const DEFAULT_INITIAL_PRODUCTS: Product[] = [];
 
 const getFromLocal = <T>(keyVal: string, email: string): T[] => {
   try {
@@ -470,7 +472,11 @@ export const storageService = {
   // --------------------------------------------------------------------------
   async getProducts(email: string): Promise<Product[]> {
     const cleanEmail = email.trim().toLowerCase();
-    const localProducts = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
+    const rawLocalProducts = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
+    const localProducts = rawLocalProducts.filter(p => !DEMO_PRODUCT_IDS.has(p.id));
+    if (rawLocalProducts.length !== localProducts.length) {
+      saveToLocal(STORAGE_KEYS.PRODUCTS, localProducts, cleanEmail);
+    }
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -492,15 +498,17 @@ export const storageService = {
         const { data, error } = await query;
 
         if (!error && data && data.length > 0) {
-          const remoteProducts = data.map(row => ({
-            id: row.id,
-            name: row.name,
-            category: row.category,
-            price: Number(row.price),
-            stock: Number(row.stock),
-            unit: row.unit,
-            barcode: row.barcode || undefined
-          }));
+          const remoteProducts = data
+            .map(row => ({
+              id: row.id,
+              name: row.name,
+              category: row.category,
+              price: Number(row.price),
+              stock: Number(row.stock),
+              unit: row.unit,
+              barcode: row.barcode || undefined
+            }))
+            .filter(p => !DEMO_PRODUCT_IDS.has(p.id));
           saveToLocal(STORAGE_KEYS.PRODUCTS, remoteProducts, cleanEmail);
           return remoteProducts;
         }
@@ -512,13 +520,7 @@ export const storageService = {
       }
     }
 
-    if (localProducts.length > 0) {
-      return localProducts;
-    }
-
-    // Default products on fresh setup
-    saveToLocal(STORAGE_KEYS.PRODUCTS, DEFAULT_INITIAL_PRODUCTS, cleanEmail);
-    return DEFAULT_INITIAL_PRODUCTS;
+    return localProducts;
   },
 
   async upsertProduct(email: string, product: Product): Promise<void> {

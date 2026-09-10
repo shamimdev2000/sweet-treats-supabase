@@ -167,6 +167,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     }
 
     try {
+      sessionStorage.setItem('sweetBakery_suppress_auto_login', 'true');
+
       const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
@@ -180,6 +182,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       });
 
       if (signUpErr) {
+        sessionStorage.removeItem('sweetBakery_suppress_auto_login');
         if (signUpErr.status === 429 || signUpErr.message?.toLowerCase().includes('rate limit')) {
           setError('ইমেইল পাঠানোর লিমিট অতিক্রম করেছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন।');
         } else {
@@ -190,24 +193,37 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       }
 
       if (!signUpData.user?.id) {
+        sessionStorage.removeItem('sweetBakery_suppress_auto_login');
         setError('রেজিস্ট্রেশন সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
         setLoading(false);
         return;
       }
 
       if (Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        sessionStorage.removeItem('sweetBakery_suppress_auto_login');
         setError('এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে। অনুগ্রহ করে লগইন করুন।');
         setLoading(false);
         return;
       }
 
+      // Explicitly sign out so registration does NOT bypass the login screen
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutErr) {
+        console.warn('Sign out after registration:', signOutErr);
+      } finally {
+        sessionStorage.removeItem('sweetBakery_suppress_auto_login');
+      }
+
       setBusinessName('');
       setOwnerName('');
       setPassword('');
+      setEmail(cleanEmail);
       setIsRegister(false);
-      setSuccess('রেজিস্ট্রেশন সফল হয়েছে! এখন পাসওয়ার্ড দিয়ে লগইন করুন।');
+      setSuccess('রেজিস্ট্রেশন সফল হয়েছে! এখন আপনার ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।');
       setLoading(false);
     } catch (err: any) {
+      sessionStorage.removeItem('sweetBakery_suppress_auto_login');
       setError(err.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে।');
       setLoading(false);
     }

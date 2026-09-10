@@ -608,19 +608,29 @@ const SalesView: React.FC<Props> = ({
                   <Boxes size={28} className="text-[#00e5ff]" />
                 </div>
                 <h3 className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  NO PRODUCTS FOUND
+                  {products.length === 0 ? 'কোনো প্রোডাক্ট যোগ করা হয়নি' : 'NO PRODUCTS FOUND'}
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-[#527196] font-semibold mt-1">
-                  Please try changing your search or category filter.
+                  {products.length === 0 
+                    ? 'ইনভেন্টরি (Inventory) থেকে আপনার দোকানের নিজস্ব প্রোডাক্ট যোগ করুন।' 
+                    : 'Please try changing your search or category filter.'}
                 </p>
-                {productSearchTerm && (
+                {products.length === 0 && onNavigateToView ? (
+                  <button 
+                    onClick={() => onNavigateToView(View.INVENTORY)}
+                    className="mt-4 px-4 py-2.5 smart-cyan-pill text-black text-xs font-bold uppercase tracking-wider rounded-full cursor-pointer flex items-center gap-1.5 shadow-md"
+                  >
+                    <Plus size={14} className="stroke-[3]" />
+                    ইনভেন্টরিতে প্রোডাক্ট যোগ করুন
+                  </button>
+                ) : productSearchTerm ? (
                   <button 
                     onClick={() => setProductSearchTerm('')}
                     className="mt-3 text-xs font-bold text-[#00e5ff] hover:underline cursor-pointer"
                   >
                     Clear Search
                   </button>
-                )}
+                ) : null}
               </div>
             ) : (
               /* Products Grid (High Density / Compact for Maximum Visibility) */

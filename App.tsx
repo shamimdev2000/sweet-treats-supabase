@@ -131,6 +131,10 @@ const App: React.FC = () => {
     if (isSupabaseConfigured && supabase) {
       // Check active Supabase Auth session
       supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (sessionStorage.getItem('sweetBakery_suppress_auto_login') === 'true') {
+          setIsDataLoaded(true);
+          return;
+        }
         if (session?.user?.email) {
           const cleanEmail = session.user.email.toLowerCase();
           setUserEmail(cleanEmail);
@@ -146,6 +150,9 @@ const App: React.FC = () => {
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (sessionStorage.getItem('sweetBakery_suppress_auto_login') === 'true') {
+          return;
+        }
         if (event === 'SIGNED_IN' && session?.user?.email) {
           const cleanEmail = session.user.email.toLowerCase();
           setUserEmail(cleanEmail);
