@@ -763,12 +763,14 @@ const App: React.FC = () => {
     }
   };
 
-  const updateManagerPassword = (newPass: string) => {
-    setManagerPassword(newPass);
+  const updateManagerPassword = async (newPass: string) => {
+    const cleanPin = newPass.trim();
+    setManagerPassword(cleanPin);
+    setUserProfile(prev => prev ? { ...prev, managerPin: cleanPin } : null);
     if (userEmail) {
-      storageService.setManagerPin(userEmail, newPass);
+      await storageService.setManagerPin(userEmail, cleanPin);
     } else {
-      localStorage.setItem('sweetBakery_managerPass', newPass);
+      localStorage.setItem('sweetBakery_managerPass', cleanPin);
     }
   };
 

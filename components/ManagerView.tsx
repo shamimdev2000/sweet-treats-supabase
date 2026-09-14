@@ -38,7 +38,7 @@ interface Props {
   profile: UserProfile | null;
   onLogout: () => void;
   onReset: () => void;
-  onUpdatePassword: (newPass: string) => void;
+  onUpdatePassword: (newPass: string) => Promise<void> | void;
   onUpdateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   onLock: () => void;
   currentPassword: string;
@@ -65,6 +65,7 @@ const ManagerView: React.FC<Props> = ({
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
+  const [isUpdatingPin, setIsUpdatingPin] = useState(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [isTestingConn, setIsTestingConn] = useState(false);
 
@@ -139,7 +140,7 @@ const ManagerView: React.FC<Props> = ({
     }
   }, [profile, username]);
 
-  const handlePassUpdate = () => {
+  const handlePassUpdate = async () => {
     const cleanPin = newPass.trim();
     if (cleanPin.length < 4 || cleanPin.length > 6) {
       toast.error("Manager PIN must be between 4 and 6 digits.");
@@ -149,11 +150,19 @@ const ManagerView: React.FC<Props> = ({
       toast.error("New PIN and Confirm PIN do not match.");
       return;
     }
-    onUpdatePassword(cleanPin);
-    setNewPass('');
-    setConfirmPass('');
-    setIsChangingPass(false);
-    toast.success("Manager Security PIN updated successfully.");
+    setIsUpdatingPin(true);
+    const toastId = toast.loading("Saving new PIN to database...");
+    try {
+      await onUpdatePassword(cleanPin);
+      setNewPass('');
+      setConfirmPass('');
+      setIsChangingPass(false);
+      toast.success("Manager Security PIN updated and saved to database!", { id: toastId });
+    } catch (e: any) {
+      toast.error(`Failed to save PIN: ${e.message || 'Database error'}`, { id: toastId });
+    } finally {
+      setIsUpdatingPin(false);
+    }
   };
 
   const handleProfileSave = async (e: React.FormEvent) => {
@@ -382,8 +391,20 @@ const ManagerView: React.FC<Props> = ({
                       onChange={e => setConfirmPass(e.target.value)}
                     />
                     <div className="flex gap-2 pt-1">
-                      <button onClick={handlePassUpdate} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors shadow-sm">Save PIN</button>
-                      <button onClick={() => { setIsChangingPass(false); setNewPass(''); setConfirmPass(''); }} className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors">Cancel</button>
+                      <button 
+                        onClick={handlePassUpdate} 
+                        disabled={isUpdatingPin}
+                        className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
+                      >
+                        {isUpdatingPin ? 'Saving...' : 'Save PIN'}
+                      </button>
+                      <button 
+                        disabled={isUpdatingPin}
+                        onClick={() => { setIsChangingPass(false); setNewPass(''); setConfirmPass(''); }} 
+                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 ) : (

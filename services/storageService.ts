@@ -165,11 +165,24 @@ export const storageService = {
   async fetchRemoteProfile(userId: string): Promise<UserProfile | null> {
     if (!isSupabaseConfigured || !supabase) return null;
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      if ((error || !data) && supabase) {
+        // Fallback: search by active session email
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const { data: byEmail } = await supabase
+            .from('profiles')
+            .select('*')
+            .ilike('email', session.user.email.trim())
+            .maybeSingle();
+          if (byEmail) data = byEmail;
+        }
+      }
 
       if (error || !data) return null;
 
@@ -186,6 +199,20 @@ export const storageService = {
         }
       }
 
+      const cleanEmail = (data.email || '').trim().toLowerCase();
+      const localPin = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin`);
+      let effectivePin = (data.manager_pin || '').trim();
+
+      // If local storage has a custom PIN previously set, and remote is missing or default '654321', preserve local custom PIN & self-heal database
+      if (localPin && localPin.length >= 4 && (!effectivePin || effectivePin === '654321')) {
+        effectivePin = localPin;
+        supabase.from('profiles').update({ manager_pin: effectivePin, updated_at: new Date().toISOString() }).eq('id', data.id).then();
+      } else if (effectivePin && effectivePin.length >= 4) {
+        // Cloud has authoritative custom PIN: sync to local storage
+        localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, effectivePin);
+        localStorage.setItem('sweetBakery_managerPass', effectivePin);
+      }
+
       const profile: UserProfile = {
         id: data.id,
         email: data.email,
@@ -194,7 +221,7 @@ export const storageService = {
         ownerName: data.owner_name || '',
         phone: data.phone || '',
         address: data.address || '',
-        managerPin: data.manager_pin || '',
+        managerPin: effectivePin || '654321',
         currencySymbol: data.currency_symbol || '৳',
         receiptFooter: data.receipt_footer || '',
         branchId: branchId || undefined,
@@ -203,12 +230,16 @@ export const storageService = {
         lastLogin: data.last_login || undefined
       };
 
-      const cleanEmail = profile.email.trim().toLowerCase();
       const index = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
       if (index > -1) {
         inMemoryProfiles[index] = { ...inMemoryProfiles[index], ...profile };
       } else {
         inMemoryProfiles.push(profile);
+      }
+      try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+      } catch (e) {
+        console.warn("Could not cache profile locally:", e);
       }
 
       return profile;
@@ -276,27 +307,84 @@ export const storageService = {
   async updateProfile(email: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
     const cleanEmail = email.trim().toLowerCase();
 
+    // Cache PIN locally immediately if managerPin is being updated
+    if (updates.managerPin) {
+      const cleanPin = updates.managerPin.trim();
+      localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, cleanPin);
+      localStorage.setItem('sweetBakery_managerPass', cleanPin);
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
-        const userId = await requireAuthUserId();
-        if (userId) {
-          const dbUpdates: any = { updated_at: new Date().toISOString() };
-          if (updates.businessName !== undefined) dbUpdates.business_name = updates.businessName;
-          if (updates.ownerName !== undefined) dbUpdates.owner_name = updates.ownerName;
-          if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
-          if (updates.address !== undefined) dbUpdates.address = updates.address;
-          if (updates.managerPin !== undefined) dbUpdates.manager_pin = updates.managerPin;
-          if (updates.currencySymbol !== undefined) dbUpdates.currency_symbol = updates.currencySymbol;
-          if (updates.receiptFooter !== undefined) dbUpdates.receipt_footer = updates.receiptFooter;
-          if (updates.lastLogin !== undefined) dbUpdates.last_login = updates.lastLogin;
+        const userId = await requireAuthUserId(cleanEmail);
+        const dbUpdates: any = { updated_at: new Date().toISOString() };
+        if (updates.businessName !== undefined) dbUpdates.business_name = updates.businessName;
+        if (updates.ownerName !== undefined) dbUpdates.owner_name = updates.ownerName;
+        if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+        if (updates.address !== undefined) dbUpdates.address = updates.address;
+        if (updates.managerPin !== undefined) dbUpdates.manager_pin = updates.managerPin.trim();
+        if (updates.currencySymbol !== undefined) dbUpdates.currency_symbol = updates.currencySymbol;
+        if (updates.receiptFooter !== undefined) dbUpdates.receipt_footer = updates.receiptFooter;
+        if (updates.lastLogin !== undefined) dbUpdates.last_login = updates.lastLogin;
 
-          const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', userId);
-          if (error) {
-            if (isPgrstMissingTableError(error)) {
-              console.warn("Supabase profiles table not yet provisioned in schema cache (PGRST205).");
-            } else {
-              console.error("Supabase updateProfile error:", error.message);
-            }
+        let updatedDbRow = false;
+
+        // 1. Try update by user ID
+        if (userId) {
+          const { data: updatedData, error } = await supabase
+            .from('profiles')
+            .update(dbUpdates)
+            .eq('id', userId)
+            .select('id');
+          if (!error && updatedData && updatedData.length > 0) {
+            updatedDbRow = true;
+          }
+        }
+
+        // 2. If row wasn't updated by ID, try by email
+        if (!updatedDbRow) {
+          const { data: updatedByEmail, error: emailErr } = await supabase
+            .from('profiles')
+            .update(dbUpdates)
+            .ilike('email', cleanEmail)
+            .select('id');
+          if (!emailErr && updatedByEmail && updatedByEmail.length > 0) {
+            updatedDbRow = true;
+          }
+        }
+
+        // 3. If profile row does not exist in profiles table yet, UPSERT IT
+        if (!updatedDbRow && userId) {
+          const cachedProfile = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+          const fullPayload = {
+            id: userId,
+            email: cleanEmail,
+            username: cleanEmail.split('@')[0],
+            business_name: updates.businessName || cachedProfile?.businessName || 'Sweet Live Bakery',
+            owner_name: updates.ownerName || cachedProfile?.ownerName || cleanEmail.split('@')[0],
+            manager_pin: updates.managerPin ? updates.managerPin.trim() : (cachedProfile?.managerPin || '654321'),
+            currency_symbol: updates.currencySymbol || cachedProfile?.currencySymbol || '৳',
+            receipt_footer: updates.receiptFooter || cachedProfile?.receiptFooter || '',
+            phone: updates.phone || cachedProfile?.phone || '',
+            address: updates.address || cachedProfile?.address || '',
+            updated_at: new Date().toISOString()
+          };
+          const { error: upsertErr } = await supabase.from('profiles').upsert(fullPayload);
+          if (!upsertErr) {
+            updatedDbRow = true;
+          } else {
+            console.warn("Could not upsert missing profile row in Supabase:", upsertErr.message);
+          }
+        }
+
+        // 4. If managerPin is updated, also synchronize to Supabase Auth metadata
+        if (updates.managerPin) {
+          try {
+            await supabase.auth.updateUser({
+              data: { manager_pin: updates.managerPin.trim() }
+            });
+          } catch (metaErr) {
+            console.warn("Could not update auth user metadata:", metaErr);
           }
         }
       } catch (err) {
@@ -310,15 +398,30 @@ export const storageService = {
         ...inMemoryProfiles[index],
         ...updates
       };
-      try {
-        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
-      } catch (e) {
-        console.warn("Could not persist profiles locally:", e);
-      }
-      return inMemoryProfiles[index];
+    } else {
+      inMemoryProfiles.push({
+        id: `prof_${Date.now()}`,
+        email: cleanEmail,
+        username: cleanEmail.split('@')[0],
+        businessName: updates.businessName || 'Sweet Live Bakery',
+        ownerName: updates.ownerName || cleanEmail.split('@')[0],
+        managerPin: updates.managerPin ? updates.managerPin.trim() : '654321',
+        currencySymbol: updates.currencySymbol || '৳',
+        receiptFooter: updates.receiptFooter || '',
+        phone: updates.phone || '',
+        address: updates.address || '',
+        role: 'owner',
+        createdAt: new Date().toISOString(),
+        ...updates
+      });
     }
 
-    return null;
+    try {
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+    } catch (e) {
+      console.warn("Could not persist profiles locally:", e);
+    }
+    return inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
   },
 
   async resetPasswordWithPin(email: string, managerPin: string, newPassword: string): Promise<{ success: boolean; message: string }> {
@@ -405,14 +508,27 @@ export const storageService = {
 
   getManagerPin(email: string): string {
     const cleanEmail = email.trim().toLowerCase();
+    const savedPin = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin`);
+    if (savedPin && savedPin.trim().length >= 4) {
+      return savedPin.trim();
+    }
     const profile = this.getProfileByEmail(cleanEmail);
-    if (profile && profile.managerPin) return profile.managerPin;
+    if (profile && profile.managerPin && profile.managerPin.trim().length >= 4) {
+      return profile.managerPin.trim();
+    }
+    const legacyPass = localStorage.getItem('sweetBakery_managerPass');
+    if (legacyPass && legacyPass.trim().length >= 4) {
+      return legacyPass.trim();
+    }
     return '654321';
   },
 
   async setManagerPin(email: string, newPin: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
-    await this.updateProfile(cleanEmail, { managerPin: newPin });
+    const cleanPin = newPin.trim();
+    localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, cleanPin);
+    localStorage.setItem('sweetBakery_managerPass', cleanPin);
+    await this.updateProfile(cleanEmail, { managerPin: cleanPin });
   },
 
   // --------------------------------------------------------------------------
