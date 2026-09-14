@@ -145,6 +145,18 @@ const App: React.FC = () => {
           setManagerPassword(pin);
           setIsAuthenticated(true);
           setCurrentView(View.SALES);
+        } else {
+          const savedEmail = localStorage.getItem('sweetBakery_email');
+          if (savedEmail) {
+            const cleanEmail = savedEmail.toLowerCase().trim();
+            setUserEmail(cleanEmail);
+            const prof = storageService.getProfileByEmail(cleanEmail);
+            setUserProfile(prof);
+            const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+            setManagerPassword(pin);
+            setIsAuthenticated(true);
+            setCurrentView(View.SALES);
+          }
         }
         setIsDataLoaded(true);
       });

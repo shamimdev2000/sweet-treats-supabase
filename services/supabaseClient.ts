@@ -1,7 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+const DEFAULT_SUPABASE_URL = 'https://pqeqlayphewbrktaxsqc.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxZXFsYXlwaGV3YnJrdGF4c3FjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2MzU5OTcsImV4cCI6MjEwNDIxMTk5N30.iFNeb8D0RIqvbnPaepiBhoINY1RK8zRKJa_oP9bt0Fg';
+
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || DEFAULT_SUPABASE_URL;
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || DEFAULT_SUPABASE_ANON_KEY;
 
 // Strip any trailing slashes or accidental /rest/v1 suffixes from the base URL
 const cleanUrl = rawUrl ? rawUrl.replace(/\/+$/, '').replace(/\/rest\/v1\/?$/, '') : undefined;

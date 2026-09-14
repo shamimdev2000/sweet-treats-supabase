@@ -586,6 +586,31 @@ export const storageService = {
   // --------------------------------------------------------------------------
   // PRODUCTS (INVENTORY)
   // --------------------------------------------------------------------------
+  async syncProductsToRemote(email: string, productsToSync: Product[]): Promise<void> {
+    if (!isSupabaseConfigured || !supabase || productsToSync.length === 0) return;
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const userId = await getActiveUserId(cleanEmail);
+      const branchId = await getActiveBranchId(cleanEmail);
+      const rows = productsToSync.map(p => ({
+        id: p.id,
+        user_id: userId,
+        user_email: cleanEmail,
+        branch_id: branchId || null,
+        name: p.name.trim(),
+        category: p.category.trim(),
+        price: Number(p.price) || 0,
+        stock: Number(p.stock) || 0,
+        unit: p.unit || 'pcs',
+        barcode: p.barcode?.trim() || null,
+        updated_at: new Date().toISOString()
+      }));
+      await supabase.from('products').upsert(rows, { onConflict: 'id' });
+    } catch (e) {
+      console.warn("syncProductsToRemote warning:", e);
+    }
+  },
+
   async getProducts(email: string): Promise<Product[]> {
     const cleanEmail = email.trim().toLowerCase();
     const rawLocalProducts = getFromLocal<Product>(STORAGE_KEYS.PRODUCTS, cleanEmail);
@@ -604,7 +629,7 @@ export const storageService = {
           .order('name', { ascending: true });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -625,9 +650,27 @@ export const storageService = {
               barcode: row.barcode || undefined
             }))
             .filter(p => !DEMO_PRODUCT_IDS.has(p.id));
+
+          // If local storage has any custom products not yet in remote, sync them to Supabase!
+          if (localProducts.length > 0) {
+            const remoteIds = new Set(remoteProducts.map(p => p.id));
+            const missingInRemote = localProducts.filter(p => !remoteIds.has(p.id));
+            if (missingInRemote.length > 0) {
+              this.syncProductsToRemote(cleanEmail, missingInRemote);
+              const merged = [...remoteProducts, ...missingInRemote];
+              saveToLocal(STORAGE_KEYS.PRODUCTS, merged, cleanEmail);
+              return merged;
+            }
+          }
+
           saveToLocal(STORAGE_KEYS.PRODUCTS, remoteProducts, cleanEmail);
           return remoteProducts;
+        } else if (!error && data && data.length === 0 && localProducts.length > 0) {
+          // Cloud has 0 products for this user but local storage has them - auto sync to cloud!
+          this.syncProductsToRemote(cleanEmail, localProducts);
+          return localProducts;
         }
+
         if (error && isPgrstMissingTableError(error)) {
           console.warn("Supabase products table not yet provisioned in schema cache (PGRST205). Serving local cache.");
         }
@@ -740,7 +783,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -955,7 +998,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1055,7 +1098,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1161,7 +1204,7 @@ export const storageService = {
           .order('name', { ascending: true });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1261,7 +1304,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1360,7 +1403,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1460,7 +1503,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1610,7 +1653,7 @@ export const storageService = {
           .order('timestamp', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1722,7 +1765,7 @@ export const storageService = {
           .order('date', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -1828,7 +1871,7 @@ export const storageService = {
           .order('created_at', { ascending: false });
 
         if (branchId) {
-          query = query.eq('branch_id', branchId);
+          query = query.or(`branch_id.eq.${branchId},user_email.eq.${cleanEmail}`);
         } else if (userId) {
           query = query.or(`user_email.eq.${cleanEmail},user_id.eq.${userId}`);
         } else {
@@ -2146,6 +2189,7 @@ export const storageService = {
         const payload: any = {
           id: p.id,
           user_id: userId,
+          user_email: cleanEmail,
           name: p.name,
           category: p.category,
           price: p.price,
@@ -2165,6 +2209,7 @@ export const storageService = {
         const salePayload: any = {
           id: s.id,
           user_id: userId,
+          user_email: cleanEmail,
           total_price: s.totalPrice,
           discount: s.discount || 0,
           amount_paid: s.amountPaid,
@@ -2211,6 +2256,7 @@ export const storageService = {
         const payload: any = {
           id: exp.id,
           user_id: userId,
+          user_email: cleanEmail,
           description: exp.description,
           amount: exp.amount,
           category: exp.category,
@@ -2227,6 +2273,7 @@ export const storageService = {
         const payload: any = {
           id: w.id,
           user_id: userId,
+          user_email: cleanEmail,
           product_id: w.productId || null,
           product_name: w.productName,
           quantity: w.quantity,
@@ -2246,6 +2293,7 @@ export const storageService = {
         const payload: any = {
           id: st.id,
           user_id: userId,
+          user_email: cleanEmail,
           name: st.name,
           designation: st.designation,
           monthly_salary: st.monthlySalary,
@@ -2262,6 +2310,7 @@ export const storageService = {
         const payload: any = {
           id: att.id,
           user_id: userId,
+          user_email: cleanEmail,
           staff_id: att.staffId,
           date: att.date,
           status: att.status
@@ -2277,6 +2326,7 @@ export const storageService = {
         const payload: any = {
           id: d.id,
           user_id: userId,
+          user_email: cleanEmail,
           staff_id: d.staffId,
           amount: d.amount,
           reason: d.reason,
@@ -2293,6 +2343,7 @@ export const storageService = {
         const payload: any = {
           id: c.id,
           user_id: userId,
+          user_email: cleanEmail,
           date: c.date,
           total_sales: c.totalSales,
           total_cash_collected: c.totalCashCollected,
@@ -2317,6 +2368,7 @@ export const storageService = {
         const payload: any = {
           id: mc.id,
           user_id: userId,
+          user_email: cleanEmail,
           month: mc.month,
           total_sales: mc.totalSales,
           total_cash_payments: mc.totalCashPayments || 0,
@@ -2339,6 +2391,7 @@ export const storageService = {
         const payload: any = {
           id: pr.id,
           user_id: userId,
+          user_email: cleanEmail,
           product_id: pr.productId || null,
           product_name: pr.productName,
           quantity: pr.quantity,
@@ -2358,6 +2411,7 @@ export const storageService = {
         const payload: any = {
           id: n.id,
           user_id: userId,
+          user_email: cleanEmail,
           title: n.title,
           content: n.content,
           priority: n.priority,
