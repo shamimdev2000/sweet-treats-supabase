@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { DailyClosing, MonthlyClosing } from '../types';
 import { generateId } from '../services/idGenerator';
+import { storageService } from '../services/storageService';
 import { 
   Calendar, 
   Lock, 
@@ -111,7 +112,9 @@ const MonthlyClosingView: React.FC<Props> = ({
 
   const handleAuthVerify = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (pinInput === managerPassword) {
+    const cleanPin = pinInput.trim();
+    const expectedPin = (managerPassword || (currentUser ? storageService.getManagerPin(currentUser) : '') || '654321').trim();
+    if (cleanPin === managerPassword || cleanPin === expectedPin || (currentUser && cleanPin === storageService.getManagerPin(currentUser))) {
       const newClosing: MonthlyClosing = {
         id: generateId('mcls'),
         month: monthLabel,

@@ -140,8 +140,8 @@ const App: React.FC = () => {
           setUserEmail(cleanEmail);
           const remoteProf = await storageService.fetchRemoteProfile(session.user.id);
           const prof = remoteProf || storageService.getProfileByEmail(cleanEmail);
-          setUserProfile(prof);
-          const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+          const pin = storageService.getManagerPin(cleanEmail);
+          setUserProfile(prof ? { ...prof, managerPin: pin } : prof);
           setManagerPassword(pin);
           setIsAuthenticated(true);
           setCurrentView(View.SALES);
@@ -151,8 +151,8 @@ const App: React.FC = () => {
             const cleanEmail = savedEmail.toLowerCase().trim();
             setUserEmail(cleanEmail);
             const prof = storageService.getProfileByEmail(cleanEmail);
-            setUserProfile(prof);
-            const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+            const pin = storageService.getManagerPin(cleanEmail);
+            setUserProfile(prof ? { ...prof, managerPin: pin } : prof);
             setManagerPassword(pin);
             setIsAuthenticated(true);
             setCurrentView(View.SALES);
@@ -170,8 +170,8 @@ const App: React.FC = () => {
           setUserEmail(cleanEmail);
           const remoteProf = await storageService.fetchRemoteProfile(session.user.id);
           const prof = remoteProf || storageService.getProfileByEmail(cleanEmail);
-          setUserProfile(prof);
-          const pin = prof?.managerPin || storageService.getManagerPin(cleanEmail);
+          const pin = storageService.getManagerPin(cleanEmail);
+          setUserProfile(prof ? { ...prof, managerPin: pin } : prof);
           setManagerPassword(pin);
           setIsAuthenticated(true);
         } else if (event === 'SIGNED_OUT') {
@@ -337,11 +337,12 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
-    const updated = await storageService.updateProfile(userEmail, updates);
+    const emailToUse = (userEmail || userProfile?.email || localStorage.getItem('sweetBakery_email') || '').trim().toLowerCase();
+    const updated = await storageService.updateProfile(emailToUse, updates);
     if (updated) {
       setUserProfile(updated);
       if (updates.managerPin) {
-        setManagerPassword(updates.managerPin);
+        setManagerPassword(updates.managerPin.trim());
       }
     }
   };
@@ -761,7 +762,10 @@ const App: React.FC = () => {
 
   const handleUnlock = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (lockInput === managerPassword) {
+    const cleanInput = lockInput.trim();
+    const emailToUse = (userEmail || userProfile?.email || localStorage.getItem('sweetBakery_email') || '').trim().toLowerCase();
+    const authoritativePin = (emailToUse ? storageService.getManagerPin(emailToUse) : (managerPassword || '654321')).trim();
+    if (cleanInput === managerPassword || cleanInput === authoritativePin) {
       setIsManagerAuthenticated(true);
       if (pendingView) setCurrentView(pendingView);
       if (pendingAction) pendingAction();
@@ -779,10 +783,13 @@ const App: React.FC = () => {
     const cleanPin = newPass.trim();
     setManagerPassword(cleanPin);
     setUserProfile(prev => prev ? { ...prev, managerPin: cleanPin } : null);
-    if (userEmail) {
-      await storageService.setManagerPin(userEmail, cleanPin);
+    const emailToUse = (userEmail || userProfile?.email || localStorage.getItem('sweetBakery_email') || '').trim().toLowerCase();
+    if (emailToUse) {
+      await storageService.setManagerPin(emailToUse, cleanPin);
     } else {
+      const nowIso = new Date().toISOString();
       localStorage.setItem('sweetBakery_managerPass', cleanPin);
+      localStorage.setItem('sweetBakery_managerPass_updatedAt', nowIso);
     }
   };
 

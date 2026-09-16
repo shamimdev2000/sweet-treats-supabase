@@ -159,7 +159,14 @@ export const storageService = {
   getProfileByEmail(email: string): UserProfile | null {
     if (!email) return null;
     const cleanEmail = email.trim().toLowerCase();
-    return inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail) || null;
+    const found = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+    if (!found) return null;
+    const localPin = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin`) || localStorage.getItem('sweetBakery_managerPass');
+    const pin = (localPin && localPin.trim().length >= 4) ? localPin.trim() : (found.managerPin || '654321');
+    return {
+      ...found,
+      managerPin: pin
+    };
   },
 
   async fetchRemoteProfile(userId: string): Promise<UserProfile | null> {
@@ -201,14 +208,40 @@ export const storageService = {
 
       const cleanEmail = (data.email || '').trim().toLowerCase();
       const localPin = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin`);
-      let effectivePin = (data.manager_pin || '').trim();
+      const localPinUpdatedAt = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin_updatedAt`);
+      const remotePin = (data.manager_pin || '').trim();
+      const remoteUpdatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+      const localUpdatedAt = localPinUpdatedAt ? new Date(localPinUpdatedAt).getTime() : 0;
 
-      // If local storage has a custom PIN previously set, and remote is missing or default '654321', preserve local custom PIN & self-heal database
-      if (localPin && localPin.length >= 4 && (!effectivePin || effectivePin === '654321')) {
-        effectivePin = localPin;
-        supabase.from('profiles').update({ manager_pin: effectivePin, updated_at: new Date().toISOString() }).eq('id', data.id).then();
-      } else if (effectivePin && effectivePin.length >= 4) {
-        // Cloud has authoritative custom PIN: sync to local storage
+      let effectivePin = remotePin || '654321';
+
+      if (localPin && localPin.length >= 4) {
+        if (!remotePin || remotePin === '654321') {
+          // Local has custom PIN, remote is missing or default: Local wins!
+          effectivePin = localPin;
+          supabase.from('profiles').update({ manager_pin: effectivePin, updated_at: new Date().toISOString() }).eq('id', data.id).then();
+        } else if (localPin !== remotePin) {
+          // Both have values, but they differ
+          if (localUpdatedAt > remoteUpdatedAt) {
+            // Local change was more recent: Local wins and syncs to cloud
+            effectivePin = localPin;
+            supabase.from('profiles').update({ manager_pin: effectivePin, updated_at: new Date().toISOString() }).eq('id', data.id).then();
+          } else if (remoteUpdatedAt > localUpdatedAt && localUpdatedAt > 0) {
+            // Remote was updated more recently: Remote wins
+            effectivePin = remotePin;
+            localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, effectivePin);
+            localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin_updatedAt`, new Date(data.updated_at).toISOString());
+            localStorage.setItem('sweetBakery_managerPass', effectivePin);
+          } else {
+            // Timestamps unavailable or local was explicitly saved: Local wins to prevent reverting user's PIN on reload
+            effectivePin = localPin;
+            supabase.from('profiles').update({ manager_pin: effectivePin, updated_at: new Date().toISOString() }).eq('id', data.id).then();
+          }
+        } else {
+          effectivePin = localPin;
+        }
+      } else if (remotePin && remotePin.length >= 4) {
+        effectivePin = remotePin;
         localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, effectivePin);
         localStorage.setItem('sweetBakery_managerPass', effectivePin);
       }
@@ -356,13 +389,14 @@ export const storageService = {
         // 3. If profile row does not exist in profiles table yet, UPSERT IT
         if (!updatedDbRow && userId) {
           const cachedProfile = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+          const currentPin = updates.managerPin ? updates.managerPin.trim() : (cachedProfile?.managerPin || this.getManagerPin(cleanEmail));
           const fullPayload = {
             id: userId,
             email: cleanEmail,
             username: cleanEmail.split('@')[0],
             business_name: updates.businessName || cachedProfile?.businessName || 'Sweet Live Bakery',
             owner_name: updates.ownerName || cachedProfile?.ownerName || cleanEmail.split('@')[0],
-            manager_pin: updates.managerPin ? updates.managerPin.trim() : (cachedProfile?.managerPin || '654321'),
+            manager_pin: currentPin,
             currency_symbol: updates.currencySymbol || cachedProfile?.currencySymbol || '৳',
             receipt_footer: updates.receiptFooter || cachedProfile?.receiptFooter || '',
             phone: updates.phone || cachedProfile?.phone || '',
@@ -377,11 +411,17 @@ export const storageService = {
           }
         }
 
-        // 4. If managerPin is updated, also synchronize to Supabase Auth metadata
+        // 4. If managerPin is updated, also synchronize to Supabase Auth metadata and localStorage
         if (updates.managerPin) {
+          const pinVal = updates.managerPin.trim();
+          const nowIso = new Date().toISOString();
+          localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, pinVal);
+          localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin_updatedAt`, nowIso);
+          localStorage.setItem('sweetBakery_managerPass', pinVal);
+          localStorage.setItem('sweetBakery_managerPass_updatedAt', nowIso);
           try {
             await supabase.auth.updateUser({
-              data: { manager_pin: updates.managerPin.trim() }
+              data: { manager_pin: pinVal }
             });
           } catch (metaErr) {
             console.warn("Could not update auth user metadata:", metaErr);
@@ -392,11 +432,21 @@ export const storageService = {
       }
     }
 
+    if (updates.managerPin) {
+      const pinVal = updates.managerPin.trim();
+      const nowIso = new Date().toISOString();
+      localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, pinVal);
+      localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin_updatedAt`, nowIso);
+      localStorage.setItem('sweetBakery_managerPass', pinVal);
+      localStorage.setItem('sweetBakery_managerPass_updatedAt', nowIso);
+    }
+
     const index = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
     if (index !== -1) {
       inMemoryProfiles[index] = {
         ...inMemoryProfiles[index],
-        ...updates
+        ...updates,
+        managerPin: updates.managerPin ? updates.managerPin.trim() : (inMemoryProfiles[index].managerPin || this.getManagerPin(cleanEmail))
       };
     } else {
       inMemoryProfiles.push({
@@ -405,7 +455,7 @@ export const storageService = {
         username: cleanEmail.split('@')[0],
         businessName: updates.businessName || 'Sweet Live Bakery',
         ownerName: updates.ownerName || cleanEmail.split('@')[0],
-        managerPin: updates.managerPin ? updates.managerPin.trim() : '654321',
+        managerPin: updates.managerPin ? updates.managerPin.trim() : this.getManagerPin(cleanEmail),
         currencySymbol: updates.currencySymbol || '৳',
         receiptFooter: updates.receiptFooter || '',
         phone: updates.phone || '',
@@ -512,13 +562,13 @@ export const storageService = {
     if (savedPin && savedPin.trim().length >= 4) {
       return savedPin.trim();
     }
-    const profile = this.getProfileByEmail(cleanEmail);
-    if (profile && profile.managerPin && profile.managerPin.trim().length >= 4) {
-      return profile.managerPin.trim();
-    }
     const legacyPass = localStorage.getItem('sweetBakery_managerPass');
     if (legacyPass && legacyPass.trim().length >= 4) {
       return legacyPass.trim();
+    }
+    const profile = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+    if (profile && profile.managerPin && profile.managerPin.trim().length >= 4) {
+      return profile.managerPin.trim();
     }
     return '654321';
   },
@@ -526,8 +576,60 @@ export const storageService = {
   async setManagerPin(email: string, newPin: string): Promise<void> {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPin = newPin.trim();
+    const nowIso = new Date().toISOString();
+
+    // 1. Immediately persist locally with timestamps
     localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin`, cleanPin);
+    localStorage.setItem(`sweetBakery_${cleanEmail}_managerPin_updatedAt`, nowIso);
     localStorage.setItem('sweetBakery_managerPass', cleanPin);
+    localStorage.setItem('sweetBakery_managerPass_updatedAt', nowIso);
+
+    // 2. Immediately update inMemoryProfiles & cache
+    const idx = inMemoryProfiles.findIndex(p => p.email.toLowerCase() === cleanEmail);
+    if (idx !== -1) {
+      inMemoryProfiles[idx] = {
+        ...inMemoryProfiles[idx],
+        managerPin: cleanPin
+      };
+      try {
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+      } catch (e) {}
+    }
+
+    // 3. Directly update Supabase profiles table
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const userId = await requireAuthUserId(cleanEmail);
+        let updated = false;
+
+        if (userId) {
+          const { error: idErr } = await supabase
+            .from('profiles')
+            .update({ manager_pin: cleanPin, updated_at: nowIso })
+            .eq('id', userId);
+          if (!idErr) updated = true;
+        }
+
+        if (!updated) {
+          await supabase
+            .from('profiles')
+            .update({ manager_pin: cleanPin, updated_at: nowIso })
+            .ilike('email', cleanEmail);
+        }
+
+        try {
+          await supabase.auth.updateUser({
+            data: { manager_pin: cleanPin }
+          });
+        } catch (authErr) {
+          // ignore if user not signed into Supabase auth
+        }
+      } catch (err) {
+        console.warn("Direct setManagerPin Supabase update error:", err);
+      }
+    }
+
+    // 4. Ensure full updateProfile executes to sync all profile caches
     await this.updateProfile(cleanEmail, { managerPin: cleanPin });
   },
 
@@ -2165,7 +2267,7 @@ export const storageService = {
           owner_name: localProfile.ownerName || null,
           phone: localProfile.phone || null,
           address: localProfile.address || null,
-          manager_pin: localProfile.managerPin || '654321',
+          manager_pin: this.getManagerPin(cleanEmail),
           currency_symbol: localProfile.currencySymbol || '৳',
           receipt_footer: localProfile.receiptFooter || 'Thank you for shopping with us!',
           role: localProfile.role || 'owner',
