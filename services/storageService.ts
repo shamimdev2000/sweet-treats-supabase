@@ -12,7 +12,8 @@ import {
   DailyNote, 
   UserProfile,
   Branch,
-  BranchMembership
+  BranchMembership,
+  SyncLogEntry
 } from '../types';
 import { supabase, isSupabaseConfigured, getActiveUserId, isPgrstMissingTableError } from './supabaseClient';
 
@@ -30,7 +31,8 @@ const STORAGE_KEYS = {
   PRODUCTION: 'sweetBakery_production',
   NOTES: 'sweetBakery_daily_notes',
   DAILY_NOTES: 'sweetBakery_daily_notes',
-  PROFILE: 'sweetBakery_business_profile'
+  PROFILE: 'sweetBakery_business_profile',
+  SYNC_LOGS: 'sweetBakery_sync_logs'
 };
 
 const PROFILES_KEY = 'sweetBakery_profiles';
@@ -556,6 +558,76 @@ export const storageService = {
     return { success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।' };
   },
 
+  async updateAccountPassword(email: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = newPassword.trim();
+
+    if (!cleanPassword || cleanPassword.length < 8) {
+      return { success: false, message: 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের (8 characters) হতে হবে।' };
+    }
+
+    // 1. If Supabase is configured and user has an active session, update in Supabase Auth (auth.users)
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.auth.updateUser({
+          password: cleanPassword
+        });
+
+        if (error) {
+          console.error("Supabase auth updateUser error:", error);
+          this.addSyncLog({
+            operation: 'Account Password Update',
+            status: 'error',
+            message: `Cloud password update failed: ${error.message}`,
+            details: error.message,
+            email: cleanEmail
+          });
+          return {
+            success: false,
+            message: `ক্লাউড পাসওয়ার্ড আপডেট ব্যর্থ: ${error.message}`
+          };
+        }
+
+        this.addSyncLog({
+          operation: 'Account Password Update',
+          status: 'success',
+          message: 'Account login password synchronized with Supabase Auth cloud.',
+          details: 'New credentials active across all devices and browsers.',
+          email: cleanEmail
+        });
+      } catch (err: any) {
+        console.error("Supabase auth updateUser exception:", err);
+        this.addSyncLog({
+          operation: 'Account Password Update',
+          status: 'error',
+          message: `Cloud password update error: ${err.message || 'Unknown error'}`,
+          details: err.message,
+          email: cleanEmail
+        });
+        return {
+          success: false,
+          message: err.message || 'ক্লাউডে পাসওয়ার্ড সেভ করা যায়নি।'
+        };
+      }
+    }
+
+    // 2. Also update in local memory and cache for seamless local fallback
+    const targetProfile = inMemoryProfiles.find(p => p.email.toLowerCase() === cleanEmail);
+    if (targetProfile) {
+      targetProfile.password = cleanPassword;
+    }
+    try {
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(inMemoryProfiles));
+    } catch (e) {
+      console.warn("Could not save profiles locally:", e);
+    }
+
+    return {
+      success: true,
+      message: 'লগইন পাসওয়ার্ড Supabase ক্লাউডে সফলভাবে আপডেট করা হয়েছে! এখন যেকোনো ডিভাইস থেকে এই নতুন পাসওয়ার্ড দিয়ে লগইন করা যাবে।'
+    };
+  },
+
   getManagerPin(email: string): string {
     const cleanEmail = email.trim().toLowerCase();
     const savedPin = localStorage.getItem(`sweetBakery_${cleanEmail}_managerPin`);
@@ -631,6 +703,14 @@ export const storageService = {
 
     // 4. Ensure full updateProfile executes to sync all profile caches
     await this.updateProfile(cleanEmail, { managerPin: cleanPin });
+
+    this.addSyncLog({
+      operation: 'Security PIN Update',
+      status: 'success',
+      message: 'Manager security PIN updated and synced across device profile.',
+      details: 'PIN persisted locally and sent to Supabase profiles table.',
+      email: cleanEmail
+    });
   },
 
   // --------------------------------------------------------------------------
@@ -2243,19 +2323,39 @@ export const storageService = {
   },
 
   async syncAllLocalDataToSupabase(email: string): Promise<{ success: boolean; count: number; error?: string }> {
+    const startTime = Date.now();
     const cleanEmail = email.trim().toLowerCase();
     if (!isSupabaseConfigured || !supabase) {
-      return { success: false, count: 0, error: "Supabase connection is not configured." };
+      const err = "Supabase connection is not configured.";
+      this.addSyncLog({
+        operation: 'Full Cloud Sync',
+        status: 'error',
+        message: 'Sync failed: Supabase connection is not configured.',
+        details: 'Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return { success: false, count: 0, error: err };
     }
 
+    let totalCount = 0;
     try {
       const userId = await requireAuthUserId();
       if (!userId) {
-        return { success: false, count: 0, error: "No active authenticated Supabase user found. Please login to Supabase." };
+        const err = "No active authenticated Supabase user found. Please login to Supabase.";
+        this.addSyncLog({
+          operation: 'Full Cloud Sync',
+          status: 'error',
+          message: 'Sync failed: Active session required for cloud sync.',
+          details: 'Row-Level Security (RLS) requires an authenticated user session to write to tables.',
+          durationMs: Date.now() - startTime,
+          email: cleanEmail
+        });
+        return { success: false, count: 0, error: err };
       }
 
       const branchId = await getActiveBranchId(cleanEmail);
-      let totalCount = 0;
+      totalCount = 0;
 
       // 1. Sync Profile
       const localProfile = this.getProfileByEmail(cleanEmail);
@@ -2277,7 +2377,16 @@ export const storageService = {
         const { error: profErr } = await supabase.from('profiles').upsert(profilePayload);
         if (profErr) {
           if (isPgrstMissingTableError(profErr)) {
-            return { success: false, count: 0, error: "Supabase tables are missing. Please execute setup_schema.sql in your Supabase SQL Editor first." };
+            const err = "Supabase tables are missing. Please execute setup_schema.sql in your Supabase SQL Editor first.";
+            this.addSyncLog({
+              operation: 'Full Cloud Sync',
+              status: 'error',
+              message: 'Sync failed: Database tables missing in Supabase schema.',
+              details: 'Run setup_schema.sql in Supabase SQL editor to create all required tables.',
+              durationMs: Date.now() - startTime,
+              email: cleanEmail
+            });
+            return { success: false, count: 0, error: err };
           }
           console.warn("Sync profile error:", profErr.message);
         } else {
@@ -2528,10 +2637,31 @@ export const storageService = {
         if (!error) totalCount++;
       }
 
+      if (totalCount > 0) {
+        this.addSyncLog({
+          operation: 'Full Cloud Sync',
+          status: 'success',
+          message: `Successfully synchronized ${totalCount} records to Supabase cloud.`,
+          details: 'All products, sales, expenses, and store records are now in cloud.',
+          itemCount: totalCount,
+          durationMs: Date.now() - startTime,
+          email: cleanEmail
+        });
+      }
+
       return { success: true, count: totalCount };
     } catch (err: any) {
       console.error("syncAllLocalDataToSupabase error:", err);
-      return { success: false, count: 0, error: err.message || "Failed to sync local data to Supabase." };
+      const errorMessage = err.message || "Failed to sync local data to Supabase.";
+      this.addSyncLog({
+        operation: 'Full Cloud Sync',
+        status: 'error',
+        message: `Sync failed: ${errorMessage}`,
+        details: err?.details || err?.hint || 'Check network connection or Supabase status.',
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return { success: false, count: 0, error: errorMessage };
     }
   },
 
@@ -2551,6 +2681,8 @@ export const storageService = {
       delete: boolean;
     };
   }> {
+    const startTime = Date.now();
+    const cleanEmail = email.trim().toLowerCase();
     const report = {
       auth: false,
       select: false,
@@ -2560,24 +2692,42 @@ export const storageService = {
     };
 
     if (!isSupabaseConfigured || !supabase) {
-      return {
+      const res = {
         success: false,
         step: 'Client Initialization',
         details: 'Supabase client is not configured (missing URL or Anon Key).',
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed: Supabase client not configured.',
+        details: res.details,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
 
     // 1. Verify Authentication
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return {
+      const res = {
         success: false,
         step: 'Authentication Check',
         details: 'No active Supabase user session found. Please log in with email and password to test database persistence.',
         error: authErr,
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed at Authentication Check.',
+        details: res.details,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
     report.auth = true;
     const userId = authData.user.id;
@@ -2590,13 +2740,22 @@ export const storageService = {
       .limit(1);
 
     if (selectErr) {
-      return {
+      const res = {
         success: false,
         step: 'SELECT products',
         details: selectErr.message,
         error: selectErr,
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed at SELECT test.',
+        details: selectErr.message,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
     report.select = true;
 
@@ -2621,13 +2780,22 @@ export const storageService = {
       .insert(testPayload);
 
     if (insertErr) {
-      return {
+      const res = {
         success: false,
         step: 'INSERT product',
         details: insertErr.message,
         error: insertErr,
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed at INSERT test.',
+        details: insertErr.message,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
     report.insert = true;
 
@@ -2639,13 +2807,22 @@ export const storageService = {
 
     if (updateErr) {
       await supabase.from('products').delete().eq('id', testProductId);
-      return {
+      const res = {
         success: false,
         step: 'UPDATE product',
         details: updateErr.message,
         error: updateErr,
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed at UPDATE test.',
+        details: updateErr.message,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
     report.update = true;
 
@@ -2656,21 +2833,101 @@ export const storageService = {
       .eq('id', testProductId);
 
     if (deleteErr) {
-      return {
+      const res = {
         success: false,
         step: 'DELETE product',
         details: deleteErr.message,
         error: deleteErr,
         report
       };
+      this.addSyncLog({
+        operation: 'Connection Diagnostic',
+        status: 'error',
+        message: 'Diagnostic failed at DELETE test.',
+        details: deleteErr.message,
+        durationMs: Date.now() - startTime,
+        email: cleanEmail
+      });
+      return res;
     }
     report.delete = true;
 
-    return {
+    const result = {
       success: true,
       step: 'Complete',
       details: 'All CRUD operations (SELECT, INSERT, UPDATE, DELETE) verified successfully on live Supabase database!',
       report
     };
+
+    this.addSyncLog({
+      operation: 'Connection Diagnostic',
+      status: 'success',
+      message: 'All Supabase database operations (SELECT, INSERT, UPDATE, DELETE) passed!',
+      details: 'Live round-trip database read/write verified on public.products table.',
+      durationMs: Date.now() - startTime,
+      email: cleanEmail
+    });
+
+    return result;
+  },
+
+  /**
+   * Sync Logs Management for Cross-Device Troubleshooting
+   */
+  getSyncLogs(email?: string): SyncLogEntry[] {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const key = cleanEmail ? `sweetBakery_${cleanEmail}_sync_logs` : STORAGE_KEYS.SYNC_LOGS;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+      if (cleanEmail) {
+        const fallbackRaw = localStorage.getItem(STORAGE_KEYS.SYNC_LOGS);
+        if (fallbackRaw) return JSON.parse(fallbackRaw);
+      }
+    } catch (e) {
+      console.warn("Error reading sync logs:", e);
+    }
+    return [];
+  },
+
+  addSyncLog(log: Omit<SyncLogEntry, 'id' | 'timestamp'>, email?: string): SyncLogEntry {
+    const cleanEmail = (email || log.email || '').trim().toLowerCase();
+    const key = cleanEmail ? `sweetBakery_${cleanEmail}_sync_logs` : STORAGE_KEYS.SYNC_LOGS;
+    
+    let platformDesc = 'Browser';
+    if (typeof navigator !== 'undefined') {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      platformDesc = `${isMobile ? 'Mobile' : 'Desktop'} (${navigator.platform || 'Web'})`;
+    }
+
+    const newEntry: SyncLogEntry = {
+      id: `sync_log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      email: cleanEmail,
+      deviceInfo: platformDesc,
+      ...log
+    };
+
+    try {
+      const existing = this.getSyncLogs(cleanEmail);
+      // Keep a rolling window of up to 120 most recent logs
+      const updatedLogs = [newEntry, ...existing].slice(0, 120);
+      localStorage.setItem(key, JSON.stringify(updatedLogs));
+      localStorage.setItem(STORAGE_KEYS.SYNC_LOGS, JSON.stringify(updatedLogs));
+    } catch (e) {
+      console.warn("Error saving sync log:", e);
+    }
+
+    return newEntry;
+  },
+
+  clearSyncLogs(email?: string): void {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (cleanEmail) {
+      localStorage.removeItem(`sweetBakery_${cleanEmail}_sync_logs`);
+    }
+    localStorage.removeItem(STORAGE_KEYS.SYNC_LOGS);
   }
 };

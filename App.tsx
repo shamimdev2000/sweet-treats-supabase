@@ -347,6 +347,11 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateAccountPassword = async (newPassword: string): Promise<{ success: boolean; message: string }> => {
+    const emailToUse = (userEmail || userProfile?.email || localStorage.getItem('sweetBakery_email') || '').trim().toLowerCase();
+    return await storageService.updateAccountPassword(emailToUse, newPassword);
+  };
+
   const handleLogout = useCallback(async () => {
     console.log('Logging out...');
     localStorage.removeItem('sweetBakery_email');
@@ -1209,6 +1214,7 @@ const App: React.FC = () => {
                   onReset={handleReset} 
                   stats={{ products: products.length, sales: sales.length, expenses: expenses.length, staff: staff.length, storageSize: Number(storageSize) }} 
                   onUpdatePassword={updateManagerPassword} 
+                  onUpdateAccountPassword={handleUpdateAccountPassword}
                   onUpdateProfile={handleUpdateProfile}
                   onLock={() => handleLockAdmin()} 
                   currentPassword={managerPassword} 

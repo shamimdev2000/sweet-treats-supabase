@@ -272,20 +272,33 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       }
 
       // Update in Supabase Auth if currently signed in or session exists
+      let cloudUpdated = false;
       if (isSupabaseConfigured && supabase) {
         try {
-          await supabase.auth.updateUser({ password: newPassword });
+          const { error: authErr } = await supabase.auth.updateUser({ password: newPassword });
+          if (!authErr) {
+            cloudUpdated = true;
+          }
         } catch (authErr) {
           console.warn("Supabase Auth password update:", authErr);
         }
       }
 
-      setSuccess('পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে! এখন লগইন করুন।');
-      setPassword(newPassword);
+      if (cloudUpdated) {
+        setSuccess('পাসওয়ার্ড সফলভাবে ক্লাউড ডাটাবেজে পরিবর্তন হয়েছে! এখন সব ডিভাইসে এই নতুন পাসওয়ার্ড দিয়ে লগইন করতে পারবেন।');
+        setPassword(newPassword);
+        setIsForgot(false);
+      } else {
+        // PIN was verified; log user in so they can update cloud credentials in Manager Settings
+        setSuccess('ম্যানেজার পিন ভেরিফিকেশন সফল! আপনি সফলভাবে প্রবেশ করছেন...');
+        setTimeout(() => {
+          onLogin(cleanEmail);
+        }, 1000);
+      }
+
       setNewPassword('');
       setConfirmPassword('');
       setManagerPin('');
-      setIsForgot(false);
     } catch (err: any) {
       setError(err.message || 'পাসওয়ার্ড রিসেট ব্যর্থ হয়েছে।');
     } finally {

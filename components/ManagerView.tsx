@@ -26,12 +26,15 @@ import {
   UploadCloud,
   Copy,
   ExternalLink,
-  Activity
+  Activity,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { storageService } from '../services/storageService';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 import { SETUP_SCHEMA_SQL } from '../services/schemaSql';
+import { SyncLogsView } from './SyncLogsView';
 
 interface Props {
   username: string;
@@ -39,6 +42,7 @@ interface Props {
   onLogout: () => void;
   onReset: () => void;
   onUpdatePassword: (newPass: string) => Promise<void> | void;
+  onUpdateAccountPassword?: (newPass: string) => Promise<{ success: boolean; message: string }>;
   onUpdateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   onLock: () => void;
   currentPassword: string;
@@ -57,6 +61,7 @@ const ManagerView: React.FC<Props> = ({
   onLogout, 
   onReset, 
   onUpdatePassword, 
+  onUpdateAccountPassword,
   onUpdateProfile,
   onLock, 
   currentPassword, 
@@ -66,8 +71,66 @@ const ManagerView: React.FC<Props> = ({
   const [confirmPass, setConfirmPass] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
   const [isUpdatingPin, setIsUpdatingPin] = useState(false);
+
+  // Cloud Account Login Password State
+  const [isChangingLoginPass, setIsChangingLoginPass] = useState(false);
+  const [newLoginPass, setNewLoginPass] = useState('');
+  const [confirmLoginPass, setConfirmLoginPass] = useState('');
+  const [showLoginPass, setShowLoginPass] = useState(false);
+  const [isUpdatingLoginPass, setIsUpdatingLoginPass] = useState(false);
+
+  const [activeAdminTab, setActiveAdminTab] = useState<'settings' | 'sync-logs'>('settings');
+  const [failedSyncCount, setFailedSyncCount] = useState(0);
+
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [isTestingConn, setIsTestingConn] = useState(false);
+
+  // Monitor sync error count for alert badge
+  useEffect(() => {
+    try {
+      const logs = storageService.getSyncLogs(username);
+      const errors = logs.filter(l => l.status === 'error').length;
+      setFailedSyncCount(errors);
+    } catch {
+      setFailedSyncCount(0);
+    }
+  }, [username, isSyncingCloud, isTestingConn]);
+
+  const handleLoginPassUpdate = async () => {
+    const cleanPass = newLoginPass.trim();
+    if (!cleanPass || cleanPass.length < 8) {
+      toast.error("পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে (Minimum 8 characters)!");
+      return;
+    }
+    if (cleanPass !== confirmLoginPass.trim()) {
+      toast.error("নতুন পাসওয়ার্ড ও কনফার্ম পাসওয়ার্ড মিলছে না!");
+      return;
+    }
+
+    setIsUpdatingLoginPass(true);
+    const toastId = toast.loading("Saving new password to Supabase Cloud...");
+    try {
+      let res: { success: boolean; message: string };
+      if (onUpdateAccountPassword) {
+        res = await onUpdateAccountPassword(cleanPass);
+      } else {
+        res = await storageService.updateAccountPassword(username, cleanPass);
+      }
+
+      if (res.success) {
+        toast.success(res.message, { id: toastId, duration: 7000 });
+        setIsChangingLoginPass(false);
+        setNewLoginPass('');
+        setConfirmLoginPass('');
+      } else {
+        toast.error(res.message, { id: toastId, duration: 7000 });
+      }
+    } catch (e: any) {
+      toast.error(`পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে: ${e.message}`, { id: toastId });
+    } finally {
+      setIsUpdatingLoginPass(false);
+    }
+  };
 
   const handleSyncToSupabase = async () => {
     setIsSyncingCloud(true);
@@ -237,8 +300,55 @@ const ManagerView: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Main Grid: Business Profile Settings & Account Security */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Admin Panel Sub-Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#162744] pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveAdminTab('settings')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeAdminTab === 'settings'
+              ? 'bg-[#00e5ff] text-[#050b14] shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#0a1527]'
+          }`}
+        >
+          <Building2 size={15} />
+          <span>Store Settings & Security</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveAdminTab('sync-logs')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeAdminTab === 'sync-logs'
+              ? 'bg-[#00e5ff] text-[#050b14] shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#0a1527]'
+          }`}
+        >
+          <Activity size={15} />
+          <span>Sync Logs & Diagnostics</span>
+          {failedSyncCount > 0 ? (
+            <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
+              {failedSyncCount} failed
+            </span>
+          ) : (
+            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+              Active
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab 2: Sync Logs & Diagnostics View */}
+      {activeAdminTab === 'sync-logs' ? (
+        <SyncLogsView 
+          username={username}
+          onRunSync={handleSyncToSupabase}
+          onRunDiagnostic={handleTestConnection}
+        />
+      ) : (
+        <>
+          {/* Main Grid: Business Profile Settings & Account Security */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left 2 Cols: Business Profile Settings */}
         <div className="lg:col-span-2 bg-white dark:bg-[#070e1b] p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-[#162744] shadow-sm">
@@ -353,7 +463,7 @@ const ManagerView: React.FC<Props> = ({
         {/* Right 1 Col: Account Security & PIN */}
         <div className="space-y-6">
           
-          {/* Manager Security PIN Card */}
+          {/* Manager Security & Password Card */}
           <div className="bg-white dark:bg-[#070e1b] p-6 rounded-3xl border border-slate-200 dark:border-[#162744] shadow-sm">
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
               <Key size={17} className="text-[#00e5ff]" />
@@ -366,18 +476,104 @@ const ManagerView: React.FC<Props> = ({
                 <span className="text-slate-900 dark:text-white font-bold text-xs truncate max-w-[140px]">{username}</span>
               </div>
 
+              {/* 1. Supabase Account Login Password (used on any device for login) */}
               <div className="p-3 bg-slate-50 dark:bg-[#0a1527] rounded-xl border border-slate-200 dark:border-[#162744] space-y-2.5">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 text-xs font-semibold">Manager PIN</span>
+                  <div className="space-y-0.5">
+                    <span className="text-slate-400 text-xs font-semibold flex items-center gap-1.5">
+                      <Lock size={13} className="text-[#00e5ff]" />
+                      Account Login Password
+                    </span>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      মোবাইল বা যেকোনো ডিভাইসে লগইন করার মূল পাসওয়ার্ড
+                    </p>
+                  </div>
+                  <span className="text-slate-900 dark:text-white font-black tracking-widest text-sm">••••••••</span>
+                </div>
+                
+                {isChangingLoginPass ? (
+                  <div className="space-y-2.5 animate-in slide-in-from-top-2 pt-1 border-t border-slate-200 dark:border-[#162744]">
+                    <div className="relative">
+                      <input 
+                        type={showLoginPass ? "text" : "password"}
+                        placeholder="নতুন পাসওয়ার্ড (কমপক্ষে ৮ ডিজিট)"
+                        className="w-full bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-xl p-2.5 pr-10 text-slate-900 dark:text-white text-xs outline-none focus:border-[#00e5ff]"
+                        value={newLoginPass}
+                        onChange={e => setNewLoginPass(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPass(!showLoginPass)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                      >
+                        {showLoginPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+
+                    <input 
+                      type={showLoginPass ? "text" : "password"}
+                      placeholder="নতুন পাসওয়ার্ড নিশ্চিত করুন"
+                      className="w-full bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-xl p-2.5 text-slate-900 dark:text-white text-xs outline-none focus:border-[#00e5ff]"
+                      value={confirmLoginPass}
+                      onChange={e => setConfirmLoginPass(e.target.value)}
+                    />
+
+                    <p className="text-[10px] text-cyan-700 dark:text-[#00e5ff]/90 bg-cyan-50 dark:bg-[#00e5ff]/10 p-2 rounded-lg border border-cyan-200 dark:border-[#00e5ff]/20">
+                      ℹ️ এটি ক্লাউড ডাটাবেজে সেভ হবে। অন্য যেকোনো ডিভাইস বা ফোনে লগইন করতে এই নতুন পাসওয়ার্ড দিতে হবে।
+                    </p>
+
+                    <div className="flex gap-2 pt-1">
+                      <button 
+                        type="button"
+                        onClick={handleLoginPassUpdate} 
+                        disabled={isUpdatingLoginPass}
+                        className="flex-1 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-60 text-white font-bold py-2 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
+                      >
+                        {isUpdatingLoginPass ? 'ক্লাউডে সেভ হচ্ছে...' : 'Save Cloud Password'}
+                      </button>
+                      <button 
+                        type="button"
+                        disabled={isUpdatingLoginPass}
+                        onClick={() => { setIsChangingLoginPass(false); setNewLoginPass(''); setConfirmLoginPass(''); }} 
+                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white font-bold py-2 rounded-lg text-xs cursor-pointer transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button 
+                    type="button"
+                    onClick={() => setIsChangingLoginPass(true)}
+                    className="w-full text-[#00e5ff] text-[10px] font-black uppercase tracking-widest hover:underline text-left cursor-pointer flex items-center justify-between pt-1"
+                  >
+                    <span>Change Login Password (পাসওয়ার্ড পরিবর্তন)</span>
+                    <span>→</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 2. Manager Security PIN (used for admin lock & sensitive operations) */}
+              <div className="p-3 bg-slate-50 dark:bg-[#0a1527] rounded-xl border border-slate-200 dark:border-[#162744] space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <div className="space-y-0.5">
+                    <span className="text-slate-400 text-xs font-semibold flex items-center gap-1.5">
+                      <ShieldCheck size={13} className="text-emerald-500" />
+                      Manager Security PIN
+                    </span>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      অ্যাডমিন প্যানেল লক ও ক্লোজিং ভেরিফিকেশন পিন (৪-৬ ডিজিট)
+                    </p>
+                  </div>
                   <span className="text-slate-900 dark:text-white font-black tracking-widest text-sm">••••••</span>
                 </div>
                 
                 {isChangingPass ? (
-                  <div className="space-y-2 animate-in slide-in-from-top-2 pt-1">
+                  <div className="space-y-2 animate-in slide-in-from-top-2 pt-1 border-t border-slate-200 dark:border-[#162744]">
                     <input 
                       type="password"
                       maxLength={6}
-                      placeholder="New PIN (4-6 digits)"
+                      placeholder="নতুন পিন (৪-৬ ডিজিটের সংখ্যা)"
                       className="w-full bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-xl p-2 text-slate-900 dark:text-white text-xs outline-none focus:border-[#00e5ff] tracking-widest text-center"
                       value={newPass}
                       onChange={e => setNewPass(e.target.value)}
@@ -385,13 +581,14 @@ const ManagerView: React.FC<Props> = ({
                     <input 
                       type="password"
                       maxLength={6}
-                      placeholder="Confirm New PIN"
+                      placeholder="পিন নিশ্চিত করুন"
                       className="w-full bg-white dark:bg-[#050b14] border border-slate-200 dark:border-[#162744] rounded-xl p-2 text-slate-900 dark:text-white text-xs outline-none focus:border-[#00e5ff] tracking-widest text-center"
                       value={confirmPass}
                       onChange={e => setConfirmPass(e.target.value)}
                     />
                     <div className="flex gap-2 pt-1">
                       <button 
+                        type="button"
                         onClick={handlePassUpdate} 
                         disabled={isUpdatingPin}
                         className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
@@ -399,6 +596,7 @@ const ManagerView: React.FC<Props> = ({
                         {isUpdatingPin ? 'Saving...' : 'Save PIN'}
                       </button>
                       <button 
+                        type="button"
                         disabled={isUpdatingPin}
                         onClick={() => { setIsChangingPass(false); setNewPass(''); setConfirmPass(''); }} 
                         className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-white font-bold py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
@@ -409,10 +607,11 @@ const ManagerView: React.FC<Props> = ({
                   </div>
                 ) : (
                   <button 
+                    type="button"
                     onClick={() => setIsChangingPass(true)}
-                    className="w-full text-[#00e5ff] text-[10px] font-black uppercase tracking-widest hover:underline text-left cursor-pointer flex items-center justify-between"
+                    className="w-full text-emerald-500 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest hover:underline text-left cursor-pointer flex items-center justify-between pt-1"
                   >
-                    <span>Change Security PIN</span>
+                    <span>Change Security PIN (পিন পরিবর্তন)</span>
                     <span>→</span>
                   </button>
                 )}
@@ -503,6 +702,21 @@ const ManagerView: React.FC<Props> = ({
                 <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1 hover:text-white">
                   <Copy size={12} /> Copy SQL
                 </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveAdminTab('sync-logs');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="w-full p-2.5 bg-[#00e5ff]/10 hover:bg-[#00e5ff]/20 text-[#00e5ff] border border-[#00e5ff]/30 rounded-xl text-left flex items-center justify-between cursor-pointer transition-all text-xs font-bold"
+              >
+                <div className="flex items-center gap-2">
+                  <Activity size={15} />
+                  <span>View Sync Logs & Diagnostics (সিঙ্ক লগ দেখুন)</span>
+                </div>
+                <span>→</span>
               </button>
             </div>
           </div>
@@ -597,6 +811,8 @@ const ManagerView: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      </>
+      )}
 
     </div>
   );

@@ -174,6 +174,19 @@ export interface UserProfile {
   lastLogin?: string;
 }
 
+export interface SyncLogEntry {
+  id: string;
+  timestamp: string;
+  operation: string;
+  status: 'success' | 'error' | 'warning';
+  message: string;
+  details?: string;
+  itemCount?: number;
+  durationMs?: number;
+  deviceInfo?: string;
+  email?: string;
+}
+
 export enum View {
   DASHBOARD = 'DASHBOARD',
   SALES = 'SALES',
