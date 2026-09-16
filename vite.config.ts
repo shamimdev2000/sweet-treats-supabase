@@ -1,14 +1,20 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(({ mode }) => {
+// Fix for Node 22 ESM where global __dirname is string '.' which causes createRequire('.') to crash in plugins
+if (typeof (globalThis as any).__dirname === 'string' && (globalThis as any).__dirname === '.') {
+  delete (globalThis as any).__dirname;
+}
+
+export default defineConfig(async ({ mode }) => {
+    const { VitePWA } = await import('vite-plugin-pwa');
     const env = loadEnv(mode, '.', '');
     return {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { overlay: false },
       },
       plugins: [
         react(),
@@ -155,14 +161,13 @@ export default defineConfig(({ mode }) => {
             ],
           },
           devOptions: {
-            enabled: true,
-            type: 'module',
+            enabled: false,
           },
         })
       ],
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          '@': path.resolve(process.cwd(), '.'),
         }
       }
     };

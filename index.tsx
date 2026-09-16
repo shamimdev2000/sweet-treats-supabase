@@ -4,16 +4,25 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { registerSW } from 'virtual:pwa-register';
 
-// Register the PWA Workbox service worker for caching and offline support
-const updateSW = registerSW({
-  onNeedRefresh() {
-    console.log('PWA Service Worker: New content available, ready to refresh.');
-  },
-  onOfflineReady() {
-    console.log('PWA Service Worker: Application is ready to work offline.');
-  },
-  immediate: true
-});
+// Register the PWA Workbox service worker for caching and offline support in production
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD) {
+  try {
+    registerSW({
+      onNeedRefresh() {
+        console.log('PWA Service Worker: New content available, ready to refresh.');
+      },
+      onOfflineReady() {
+        console.log('PWA Service Worker: Application is ready to work offline.');
+      },
+      onRegisterError(error) {
+        console.warn('PWA Service Worker registration skipped:', error);
+      },
+      immediate: true
+    });
+  } catch (e) {
+    console.warn('PWA Service Worker registration error:', e);
+  }
+}
 
 const rootElement = document.getElementById('root');
 

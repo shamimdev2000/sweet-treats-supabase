@@ -3,6 +3,39 @@
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
+    <script>
+      // Suppress benign Vite HMR reconnection logs in sandboxed iframe environment
+      (function() {
+        var origError = console.error;
+        var origWarn = console.warn;
+        function isViteHmr(args) {
+          if (!args || !args.length) return false;
+          var str = '';
+          for (var i = 0; i < args.length; i++) {
+            str += ' ' + String(args[i] && (args[i].message || args[i].stack || args[i]));
+          }
+          return str.indexOf('[vite] failed to connect to websocket') !== -1 ||
+                 str.indexOf('[vite] connecting...') !== -1 ||
+                 str.indexOf('[vite] connected.') !== -1 ||
+                 str.indexOf('[vite] server connection lost') !== -1 ||
+                 (str.indexOf('[vite]') !== -1 && (str.indexOf('websocket') !== -1 || str.indexOf('WebSocket') !== -1));
+        }
+        console.error = function() {
+          if (isViteHmr(arguments)) return;
+          return origError.apply(console, arguments);
+        };
+        console.warn = function() {
+          if (isViteHmr(arguments)) return;
+          return origWarn.apply(console, arguments);
+        };
+        window.addEventListener('error', function(e) {
+          if (e && e.message && e.message.indexOf('[vite]') !== -1) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#00c8ff">
     <meta name="apple-mobile-web-app-capable" content="yes">

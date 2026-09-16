@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import { Product, Sale, Expense, View, Staff, Attendance, DailyClosing, Deduction, Wastage, MonthlyClosing, Production, DailyNote, UserProfile } from './types';
 import { generateId } from './services/idGenerator';
 import Dashboard from './components/Dashboard';
@@ -1383,6 +1383,8 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+        {/* Global Toast Notifications */}
+        <Toaster richColors position="top-right" theme={theme} />
       </main>
     </div>
   );
